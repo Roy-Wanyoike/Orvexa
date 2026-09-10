@@ -99,7 +99,10 @@ wire, err := adapter.TranslateUssdCallback(ctx, rawCallbackBody)
   `UssdCallback` (with the resolved `Phase`: started/continued) and returns
   a `UssdReply`. **Menu text is passed through verbatim** — the adapter
   prefixes `CON `/`END ` per `End` (text already carrying those prefixes is
-  passed through untouched) and never reflows, truncates or re-encodes.
+  passed through untouched) and never reflows, truncates or re-encodes. An
+  empty (or whitespace-only) reply is a handler bug, never a valid carrier
+  answer: it is rejected with `ussd.empty_reply` and the session reservation
+  is rewound, so the carrier's retry starts fresh.
 - **sessionId↔interaction-id convention**: the platform adopts the carrier
   `sessionId` as the interaction identity of the USSD leg. Emitted events
   carry `sessionId` as `InteractionID` and `Config.TenantID` as `TenantID`
@@ -171,3 +174,17 @@ answering with sync status `102`, which is a real AT response (inline
 delivery confirmation), so the sync contract (`sent` → `delivered` by the
 time `Send` returns) holds without pretending every network delivers
 inline: the delivery-path tests cover the `101` + async-report flow.
+
+## Test map
+
+| File | Covers |
+|---|---|
+| `fake_test.go` | The `httptest` fake carrier (`/messaging`, `apiKey` header auth, scriptable statuses, `Retry-After`), the credential fixture, the Recorder seeding helper, and the raw `capture` hook the USSD tests assert through |
+| `sms_test.go` | Conformance kit wiring, sync/async delivery lifecycles → `ProviderEvent`, delivery-report status table, guard taxonomy, bounded retry budget (429/5xx/`Retry-After`), duplicate-send suppression + concurrent single-flight, strict E.164 boundary table, zero credential/PII leakage sweep |
+| `ussd_test.go` | Callback parsing table (form/JSON/malformed), session lifecycle events (`started`/`continued`/`ended`), `CON`/`END` wire passthrough, ended-session retry idempotency, handler-failure rewind, best-effort emission posture, concurrent-session race probe |
+
+The USSD tests observe events through the raw capture hook (delivery layer)
+because `comms.Processor` does not apply the `ussd.session.*` vocabulary
+yet — the integration gap documented above. The SMS tests observe events
+through the conformance Recorder (processor applied), which is the
+authoritative path.
