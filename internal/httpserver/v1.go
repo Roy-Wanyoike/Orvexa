@@ -17,6 +17,7 @@ import (
 	"github.com/Roy-Wanyoike/orvexa/internal/platform/httpx"
 	"github.com/Roy-Wanyoike/orvexa/internal/platform/outbox"
 	"github.com/Roy-Wanyoike/orvexa/internal/queues"
+	"github.com/Roy-Wanyoike/orvexa/internal/routing"
 	"github.com/Roy-Wanyoike/orvexa/internal/tenancy"
 	"github.com/Roy-Wanyoike/orvexa/internal/webhooks"
 	"github.com/Roy-Wanyoike/orvexa/internal/messaging"
@@ -37,6 +38,7 @@ type DomainDeps struct {
 	CommsProcessor *comms.Processor
 	Calls         *telephony.Service
 	Messages      *messaging.Service
+	Routing       *routing.Service
 }
 
 // MountV1 assembles the /api/v1 route tree.
@@ -71,6 +73,7 @@ func MountV1(r chi.Router, deps DomainDeps, limiter *httpx.RateLimit, webhookLim
 			MountCases(authed, deps.Cases)
 			MountCalls(authed, deps.Calls)
 			MountMessages(authed, deps.Messages)
+			MountRouting(authed, deps.Routing)
 		})
 	})
 }
