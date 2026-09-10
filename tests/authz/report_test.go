@@ -92,7 +92,7 @@ func writeReport(t *testing.T, s *stack, l *ledger) {
 	for _, r := range l.rows {
 		switch r.RouteID {
 		case "PLAT-1", "PLAT-2", "AUTH-1", "AUTH-2", "WEB-1", "WEB-2", "WEB-3", "WEB-4", "ID-1", "ID-2",
-			"IDW-1", "IDW-2", "IDW-3", "ORACLE-1", "ORACLE-2":
+			"IDW-1", "IDW-2", "IDW-3", "ORACLE-1", "ORACLE-2", "DEF-1", "R27", "R28":
 			fmt.Fprintf(&b, "| %s | `%s` | %s | %s | %d | **%s** | %s |\n",
 				r.RouteID, r.Route, r.Probe, r.Expect, r.Got, r.Result, r.Note)
 		}
@@ -110,7 +110,10 @@ func writeReport(t *testing.T, s *stack, l *ledger) {
 	b.WriteString("\n")
 
 	b.WriteString("## Filed isolation defects\n\n")
-	for _, d := range defectRegistry {
+	sorted := make([]defectInfo, len(defectRegistry))
+	copy(sorted, defectRegistry)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].id < sorted[j].id })
+	for _, d := range sorted {
 		observed := "not observed this run"
 		if st, ok := l.defect[d.id]; ok && st != 0 {
 			observed = fmt.Sprintf("reproduced this run (HTTP %d)", st)
@@ -140,7 +143,7 @@ func routeOrder(l *ledger) []*mrow {
 	for _, r := range l.rows {
 		switch r.RouteID {
 		case "PLAT-1", "PLAT-2", "AUTH-1", "AUTH-2", "WEB-1", "WEB-2", "WEB-3", "WEB-4", "ID-1", "ID-2",
-			"IDW-1", "IDW-2", "IDW-3", "ORACLE-1", "ORACLE-2":
+			"IDW-1", "IDW-2", "IDW-3", "ORACLE-1", "ORACLE-2", "DEF-1", "R27", "R28":
 			continue
 		}
 		if strings.HasPrefix(r.RouteID, "REF-") {

@@ -70,6 +70,7 @@ type fixtures struct {
 	wfA1                   string
 	aiA1                   string // seeded via SQL (no AI-agent admin API)
 
+	callA1  string // REAL placed call, captured from R27 (simulator-registered leg)
 	interB1 string
 	convB1  string
 
@@ -120,14 +121,22 @@ func (s *stack) do(t *testing.T, method, path, key, body string, hdr map[string]
 	return resp.StatusCode, string(b)
 }
 
-// jsonField extracts a top-level string field from a response body. Note:
-// interactions.Rec ships without json tags, so its wire keys are the Go field
-// names ("ID", "ConversationID", "TenantID") — callers pass the exact key.
+// jsonField extracts a string field from a response body. Success bodies are
+// enveloped as {data, meta} (httpx.Envelope), so the resource is looked up
+// inside "data" first, falling back to the top level. Note: most Rec types
+// carry json tags (lowercase "id"), but interactions.Rec ships without tags,
+// so its wire keys are the Go field names ("ID", "ConversationID",
+// "TenantID") — callers pass the exact key.
 func jsonField(t *testing.T, body, field string) string {
 	t.Helper()
 	m := map[string]any{}
 	if err := json.Unmarshal([]byte(body), &m); err != nil {
 		t.Fatalf("decode response (%s): %v\nbody: %s", field, err, body)
+	}
+	if d, ok := m["data"].(map[string]any); ok {
+		if v, ok := d[field].(string); ok && v != "" {
+			return v
+		}
 	}
 	v, _ := m[field].(string)
 	return v
@@ -203,10 +212,16 @@ func bootStack(t *testing.T) *stack {
 	t.Cleanup(s.pool.Close)
 
 	for _, tbl := range requiredTables {
-		var reg any
+		var reg *string
+		// ::text cast: to_regclass returns the regclass type (OID 2205),
+		// which pgx v5.7.2 cannot scan into an interface destination — the
+		// text cast makes the probe version-proof. The underlying error is
+		// surfaced so a connect/permission problem is never misread as a
+		// missing migration.
 		if err := s.pool.QueryRow(ctx,
-			`SELECT to_regclass('public.'||$1)`, tbl).Scan(&reg); err != nil || reg == nil {
-			t.Fatalf("migrations incomplete: table %q missing (run scripts/devstack.sh start first)", tbl)
+			`SELECT to_regclass('public.'||$1)::text`, tbl).Scan(&reg); err != nil || reg == nil || *reg == "" {
+			t.Fatalf("migrations incomplete: table %q missing (run scripts/devstack.sh start first): %v",
+				tbl, err)
 		}
 	}
 
@@ -404,7 +419,11 @@ func (s *stack) seedFixtures(t *testing.T) {
 		if code != http.StatusCreated {
 			t.Fatalf("seed %s: got %d want 201\n%s", what, code, resp)
 		}
-		return jsonField(t, resp, "id")
+		id := jsonField(t, resp, "id")
+		if id == "" {
+			t.Fatalf("seed %s: 201 response carries no data.id\n%s", what, resp)
+		}
+		return id
 	}
 
 	fx.custA1 = must201(fx.keyA, "/api/v1/customers/",
@@ -424,9 +443,19 @@ func (s *stack) seedFixtures(t *testing.T) {
 		fmt.Sprintf(`{"name":"authz-q-a-%s","priority":5}`, fx.fx_run()),
 		"queueA1")
 
+	// wire-contract note: interactions.CreateInput ships WITHOUT json tags, so
+	// its request keys are the Go field names (CustomerID, Channel, ...); the
+	// response likewise carries Go field names ("ID"/"ConversationID").
+	// Each seed carries a distinct ProviderRef: the platform dedupes
+	// (tenant_id, provider, provider_ref) and binds a ref-less create as '',
+	// so a second ref-less create per tenant would 409 (defect D7). Real
+	// providers always send a ref, and so does the harness.
+	seedN := 0
 	seedInteraction := func(key, cust, channel, dest string) (interID, convID string) {
+		seedN++
 		code, resp := post(key, "/api/v1/interactions/",
-			fmt.Sprintf(`{"customer_id":%q,"channel":%q,"direction":"inbound","source":"seed:matrix","destination":%q}`, cust, channel, dest))
+			fmt.Sprintf(`{"CustomerID":%q,"Channel":%q,"Direction":"inbound","Source":"seed:matrix","Destination":%q,"Provider":"matrix","ProviderRef":"matrix:%s-%d"}`,
+				cust, channel, dest, fx.runID, seedN))
 		if code != http.StatusCreated {
 			t.Fatalf("seed interaction (%s): got %d want 201\n%s", channel, code, resp)
 		}
