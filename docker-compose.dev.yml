@@ -7,6 +7,8 @@
 #   ORVEXA_DATABASE_URL=postgres://postgres:postgres@127.0.0.1:55432/orvexa?sslmode=disable
 #   ORVEXA_NATS_URL=nats://localhost:4222
 #   ORVEXA_OPENSEARCH_URL=http://localhost:9200   (issue #36 — optional; unset = search off)
+#   ORVEXA_CLICKHOUSE_URL=clickhouse://default@127.0.0.1:19000/default
+#     (issue #35 — optional; unset = analytics facts stay on PostgreSQL)
 #
 # Usage:   docker compose -f docker-compose.dev.yml up -d
 # Stop:    docker compose -f docker-compose.dev.yml down
@@ -130,6 +132,43 @@ services:
       - TEMPORAL_ADDRESS=temporal:7233
     depends_on: [temporal]
 
+  # OLAP facts backend (issue #35). OPTIONAL dependency: with
+  # ORVEXA_CLICKHOUSE_URL unset the analytics worker keeps appending facts to
+  # PostgreSQL (internal/analytics) — zero drift. Set → the batched store in
+  # internal/analytics/clickhouse appends there instead (never both).
+  clickhouse:
+    image: clickhouse/clickhouse-server:24
+    container_name: orvexa-dev-clickhouse
+    ports:
+      # Native (clickhouse-go default) + HTTP interfaces. Non-standard host
+      # ports like PostgreSQL's 55432 above: a local ClickHouse install keeps
+      # its usual 9000/8123.
+      - "19000:9000"
+      - "18123:8123"
+    volumes:
+      # Engine-specific DDL (NOT applied by the PG runners — see the file's
+      # header): the official image executes /docker-entrypoint-initdb.d/* on
+      # FIRST init of the data volume only. Existing volume → apply manually:
+      #   docker compose -f docker-compose.dev.yml exec clickhouse \
+      #     clickhouse-client --multiquery < migrations/0011_clickhouse_facts.sql
+      - ./migrations/0011_clickhouse_facts.sql:/docker-entrypoint-initdb.d/0011_clickhouse_facts.sql:ro
+      - orvexa-dev-clickhouse:/var/lib/clickhouse
+    # Recommended descriptor limit for the server process.
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    security_opt:
+      - no-new-privileges:true
+
 volumes:
   orvexa-dev-pgdata:
   orvexa-dev-osdata:
+  # Wiped by `docker compose -f docker-compose.dev.yml down -v`; facts DDL is
+  # re-applied on the next first-init. Retention notes: docs/devstack.md.
+  orvexa-dev-clickhouse:
