@@ -32,6 +32,7 @@ import (
 	"github.com/Roy-Wanyoike/orvexa/internal/platform/outbox"
 	"github.com/Roy-Wanyoike/orvexa/internal/queues"
 	"github.com/Roy-Wanyoike/orvexa/internal/routing"
+	"github.com/Roy-Wanyoike/orvexa/internal/search"
 	"github.com/Roy-Wanyoike/orvexa/internal/telephony"
 	"github.com/Roy-Wanyoike/orvexa/internal/tenancy"
 	"github.com/Roy-Wanyoike/orvexa/internal/tools"
@@ -78,6 +79,10 @@ func main() {
 	}
 
 	deps := httpserver.DomainDeps{Tenancy: tenancy.NewService(pool)}
+	// conversation search ([O-27]): constructible even when OpenSearch is not
+	// configured — the service reports ErrNotConfigured honestly; the indexer
+	// (worker) stays off and the route serves a typed 503.
+	deps.Search = search.NewService(search.NewServiceFromEnv())
 	if pool != nil {
 		writer := outbox.NewWriter(pool)
 		gateway := webhooks.NewGateway(pool, cfg.WebhookHMACSecret)
