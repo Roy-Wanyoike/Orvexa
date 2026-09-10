@@ -26,9 +26,17 @@ run-realtime:
 
 # Apply migrations in lexical order using psql ORVEXA_DATABASE_URL.
 # (A dedicated migration runner ships with the deploy pipeline.)
+# Engine-specific files (e.g. migrations/*clickhouse*.sql, issue #35) are
+# NOT PostgreSQL DDL — they are skipped here and applied to their own engine
+# (compose init or clickhouse-client; see docs/devstack.md).
 migrations:
 	@set -euo pipefail; \
 	for f in migrations/*.sql; do \
+		case "$$f" in \
+		*clickhouse*) \
+			echo "== skipping engine-specific $$f (ClickHouse DDL; see docs/devstack.md)"; \
+			continue ;; \
+		esac; \
 		echo "== applying $$f"; \
 		psql "$${ORVEXA_DATABASE_URL:?set ORVEXA_DATABASE_URL}" -v ON_ERROR_STOP=1 -f "$$f"; \
 	done
