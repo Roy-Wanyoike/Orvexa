@@ -248,3 +248,54 @@ at the mount sites (`auth` vs `webhooks`) with `FailClosed=true` on the auth sur
 window permits up to 2× limit across a bucket boundary (documented; a ZSET sliding window is the
 follow-up if that is unacceptable); no Redis Cluster/pub-sub scope by issue constraint.
 >>>>>>> origin/main
+
+---
+
+## Wave D1 — [O-30] issue #39: Independent security sweep — PUBLIC-VISIBILITY GATE (agent D1)
+
+**Branch:** `security/sweep` · **Base:** main @ `6459bc5` · **Ownership honored:** only
+`scripts/security-scan.sh`, `docs/security/`, `internal/platform/httpx/` (header+limiter,
+gaps proven first), `.env.example` (security vars). Cross-surface defects filed, not patched.
+
+**Deliverables:**
+- `scripts/security-scan.sh` — self-contained secret scanner (bash+git+python3 stdlib,
+  zero installs/network): 12 checks (AWS/Slack/OpenAI/Google/GitHub tokens, private-key
+  blocks, credential URLs, ≥40-char high-entropy strings at Shannon ≥ 4.5 bits/char,
+  tracked `.env` files, secret-named artifacts, generic credential assigns), explicit
+  per-hit allowlist justification, redaction-only output, exit 0/1/2. Canary-validated:
+  11/11 planted secret shapes detected (exit 1); tracked tree CLEAN (exit 0), 261 files.
+- govulncheck ./... triaged (9 findings): **1 symbol-level reachable — GO-2026-5004
+  (pgx < v5.9.2) via cases.Service.ListNotes → Pool.Query → sanitize.SanitizeSQL**;
+  exploitability assessed (all Orvexa SQL is extended-protocol parameterized; no
+  SanitizeSQL/simple-protocol usage) but a SQL-injection-class finding with a same-major
+  patch does not ride a public repo → bump filed as **#81**, verdict BLOCKED on it.
+  chi RealIP spoofing vulns (GO-2026-5777/5775) verified unreachable (RealIP unused;
+  clientIP = RemoteAddr).
+- `internal/platform/httpx/middleware.go` — CSP (`default-src 'none'; frame-ancestors
+  'none'; base-uri 'none'`) + HSTS (`max-age=31536000; includeSubDomains`) added to the
+  global SecurityHeaders middleware (JSON-only API ⇒ maximal CSP is free; HSTS sent
+  unconditionally per RFC 6797 + edge-TLS topology). Tests: exact header matrix on 2xx,
+  4xx and panic-recovery paths.
+- `internal/platform/httpx/middleware.go` — limiter eviction O(n²)→O(n log n): measured
+  ~150 µs/op sustained under unique-key flood at the 10k-bucket cap (algorithmic
+  DoS), now ~1.0 µs/op; policy unchanged (oldest half by last touch); committed
+  benchmark + eviction-policy test pin it.
+- Rate-limit matrix: 24/24 mutation routes covered (23 POST + 1 PUT), keys are
+  server-side only (`principal.APIKeyID` / `"oidc:"+verified sub` / socket RemoteAddr);
+  no client-supplied key input exists.
+- Webhook ingress reviewed read-only: fail-closed paths, verifier registry (#24)
+  normalization/precedence, dedupe single-effect — evidenced by the existing adversarial
+  suite (`-race` green, 87.7% coverage). Known contract bug referenced (#59).
+- `.env.example` — ORVEXA_OIDC_* security block added (CLIENT_SECRET also keys OAuth
+  state HMAC); non-security env drift filed as #82. Worklog conflict block found → #84.
+- `docs/security/security-posture.md` — evidence tables + verdict line.
+
+**Verification (CI-equivalent local full matrix):** `gofmt -l .` empty · `go vet ./...`
+clean · `go build ./...` clean · `make lint-todos` clean · `go test -race
+./internal/platform/httpx/...` green · `go test -race ./...` 31 packages ok / 0 failures.
+
+**PR:** "security: independent sweep — secret scan, govulncheck, headers, rate-limit
+matrix (#39)" — Closes #39.
+
+**Risks / follow-ups:** verdict is **BLOCKED** on the pgx bump (#81) — land it, re-run
+govulncheck, flip to PUBLIC-READY; accepted residuals documented in posture §7 (R1–R7).
