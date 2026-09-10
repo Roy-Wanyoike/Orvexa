@@ -149,7 +149,7 @@ func MountConversations(r chi.Router, conv *conversations.Service, inter *intera
 }
 
 type conversationHandlers struct {
-	conv *conversations.Service
+	conv  *conversations.Service
 	inter *interactions.Service
 }
 

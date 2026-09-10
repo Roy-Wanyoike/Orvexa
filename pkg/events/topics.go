@@ -13,12 +13,12 @@ const (
 	TopicInteractionCompleted = "interaction.completed"
 
 	// Interaction plane — telephony & messaging (provider-agnostic)
-	TopicCallRequested = "call.requested"
-	TopicCallRinging   = "call.ringing"
-	TopicCallConnected = "call.connected"
-	TopicCallCompleted = "call.completed"
-	TopicCallFailed    = "call.failed"
-	TopicMessageSent   = "message.sent"
+	TopicCallRequested    = "call.requested"
+	TopicCallRinging      = "call.ringing"
+	TopicCallConnected    = "call.connected"
+	TopicCallCompleted    = "call.completed"
+	TopicCallFailed       = "call.failed"
+	TopicMessageSent      = "message.sent"
 	TopicMessageDelivered = "message.delivered"
 	TopicMessageRead      = "message.read"
 	TopicMessageReceived  = "message.received"

@@ -22,11 +22,11 @@ import (
 
 // Request carries everything the engine weighs.
 type Request struct {
-	InteractionID string   `json:"interaction_id"`
+	InteractionID  string   `json:"interaction_id"`
 	RequiredSkills []string `json:"required_skills"`
-	Language      string   `json:"language"`
-	Priority      int      `json:"priority"` // 1-10, higher = more urgent
-	QueueID       string   `json:"queue_id,omitempty"` // pin to a queue
+	Language       string   `json:"language"`
+	Priority       int      `json:"priority"`           // 1-10, higher = more urgent
+	QueueID        string   `json:"queue_id,omitempty"` // pin to a queue
 }
 
 // Candidate is a scored agent.
@@ -270,14 +270,14 @@ func (s *Service) SetPresence(ctx context.Context, tenantID, agentID, status str
 
 // DecisionRow is the persisted read model of a decision.
 type DecisionRow struct {
-	ID              string          `json:"id"`
-	InteractionID   string          `json:"interaction_id"`
-	Outcome         string          `json:"outcome"`
-	AssignedAgentID string          `json:"assigned_agent_id,omitempty"`
-	AssignedQueueID string          `json:"assigned_queue_id,omitempty"`
-	Candidates      []byte          `json:"candidates"`
-	DecidedAt       time.Time       `json:"decided_at"`
-	LatencyMicros   int64           `json:"latency_micros"`
+	ID              string    `json:"id"`
+	InteractionID   string    `json:"interaction_id"`
+	Outcome         string    `json:"outcome"`
+	AssignedAgentID string    `json:"assigned_agent_id,omitempty"`
+	AssignedQueueID string    `json:"assigned_queue_id,omitempty"`
+	Candidates      []byte    `json:"candidates"`
+	DecidedAt       time.Time `json:"decided_at"`
+	LatencyMicros   int64     `json:"latency_micros"`
 }
 
 // ListDecisions returns the immutable decision records (supervisor visibility).
@@ -320,10 +320,10 @@ func (s *Service) ListDecisions(ctx context.Context, tenantID, interactionID str
 
 // Presence is the agent presence read model.
 type Presence struct {
-	AgentID              string     `json:"agent_id"`
-	Status               string     `json:"status"`
-	CurrentInteractionID string     `json:"current_interaction_id,omitempty"`
-	UpdatedAt            time.Time  `json:"updated_at"`
+	AgentID              string    `json:"agent_id"`
+	Status               string    `json:"status"`
+	CurrentInteractionID string    `json:"current_interaction_id,omitempty"`
+	UpdatedAt            time.Time `json:"updated_at"`
 }
 
 // GetPresence returns one agent's presence.

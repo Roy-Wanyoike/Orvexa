@@ -12,9 +12,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Roy-Wanyoike/orvexa/internal/realtime"
 	"github.com/Roy-Wanyoike/orvexa/internal/platform/bus"
 	"github.com/Roy-Wanyoike/orvexa/internal/platform/db"
+	"github.com/Roy-Wanyoike/orvexa/internal/realtime"
 	"github.com/Roy-Wanyoike/orvexa/internal/tenancy"
 	"github.com/Roy-Wanyoike/orvexa/pkg/config"
 	"github.com/Roy-Wanyoike/orvexa/pkg/events"

@@ -36,10 +36,10 @@ type Skill struct {
 }
 
 type CreateInput struct {
-	ExternalIdentity string `json:"external_identity"`
-	DisplayName      string `json:"display_name"`
-	Email            string `json:"email"`
-	Language         string `json:"language"`
+	ExternalIdentity string  `json:"external_identity"`
+	DisplayName      string  `json:"display_name"`
+	Email            string  `json:"email"`
+	Language         string  `json:"language"`
 	Skills           []Skill `json:"skills"`
 }
 

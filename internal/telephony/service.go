@@ -19,12 +19,12 @@ func NewService(interactions *interactions.Service, provider VoiceProvider) *Ser
 
 // PlaceCallInput is the validated place-call request.
 type PlaceCallInput struct {
-	CustomerID  string `json:"customer_id"`
-	From        string `json:"from"`
-	To          string `json:"to"`
-	AgentID     string `json:"agent_id"`
-	QueueID     string `json:"queue_id"`
-	Options     map[string]any `json:"options"`
+	CustomerID string         `json:"customer_id"`
+	From       string         `json:"from"`
+	To         string         `json:"to"`
+	AgentID    string         `json:"agent_id"`
+	QueueID    string         `json:"queue_id"`
+	Options    map[string]any `json:"options"`
 }
 
 // PlaceCall creates a pending outbound voice interaction and hands the leg to

@@ -26,7 +26,7 @@ func TestCaseReopenAllowedFromResolved(t *testing.T) {
 
 func TestCaseIllegalTransitions(t *testing.T) {
 	illegal := []struct{ from, to Status }{
-		{StatusOpen, StatusClosed},       // must resolve first
+		{StatusOpen, StatusClosed}, // must resolve first
 		{StatusOpen, StatusPendingCustomer},
 		{StatusClosed, StatusInProgress}, // reopen of closed forbidden
 		{StatusCanceled, StatusOpen},
