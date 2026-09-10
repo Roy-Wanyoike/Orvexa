@@ -14,6 +14,7 @@ import (
 
 	"github.com/Roy-Wanyoike/orvexa/internal/workflows"
 	"github.com/Roy-Wanyoike/orvexa/internal/workflows/temporaldriver"
+	apperrors "github.com/Roy-Wanyoike/orvexa/pkg/errors"
 )
 
 // TestTemporalDriverIntegration proves the driver against a REAL Temporal
@@ -85,8 +86,8 @@ func TestTemporalDriverIntegration(t *testing.T) {
 			t.Fatalf("expected scheduled->contacted->closed trace, got %+v", got)
 		}
 		msgs := svc.queued()
-		if len(msgs) != 1 || msgs[0].Channel != "sms" || msgs[0].TenantID != "itn-1" {
-			t.Fatalf("expected one tenant-scoped SMS contact, got %+v", msgs)
+		if len(msgs) != 1 || msgs[0] != "itn-1|sms||" {
+			t.Fatalf("expected one tenant-scoped SMS contact (itn-1|sms||), got %+v", msgs)
 		}
 	})
 
