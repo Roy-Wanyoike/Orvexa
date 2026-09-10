@@ -185,19 +185,22 @@ func (f *fakeTwilio) CallSID(n int) string {
 }
 
 // serve routes by resource shape (the paths the adapter's client builds).
+// The /callback endpoint is the ADAPTER-side receiver (Twilio authenticates
+// callbacks by X-Twilio-Signature at the gateway, not by basic auth), so it
+// is routed before the REST auth wall. REST attempts are captured even when
+// the auth wall rejects them, so retry-count assertions include 401s.
 func (f *fakeTwilio) serve(w http.ResponseWriter, r *http.Request) {
-	if !f.checkAuth(w, r) {
-		return
-	}
 	switch {
+	case r.URL.Path == "/callback":
+		f.serveCallback(w, r)
 	case strings.HasSuffix(r.URL.Path, "/Calls.json"):
 		f.servePlace(w, r)
 	case strings.Contains(r.URL.Path, "/Calls/") && strings.HasSuffix(r.URL.Path, ".json"):
 		f.serveUpdate(w, r)
-	case r.URL.Path == "/callback":
-		f.serveCallback(w, r)
 	default:
-		http.NotFound(w, r)
+		if f.checkAuth(w, r) {
+			http.NotFound(w, r)
+		}
 	}
 }
 
@@ -220,8 +223,9 @@ func (f *fakeTwilio) checkAuth(w http.ResponseWriter, r *http.Request) bool {
 	return false
 }
 
-// servePlace handles POST /Calls.json: capture, consume an optional script
-// entry, answer, and — on success — fire the status-callback sequence
+// servePlace handles POST /Calls.json: capture (auth wall included, so 401s
+// count as carrier-visible attempts), consume an optional script entry,
+// answer, and — on success — fire the status-callback sequence
 // asynchronously to the StatusCallback URL the adapter supplied.
 func (f *fakeTwilio) servePlace(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
@@ -230,6 +234,11 @@ func (f *fakeTwilio) servePlace(w http.ResponseWriter, r *http.Request) {
 	}
 	f.mu.Lock()
 	f.places = append(f.places, fakePlace{Path: r.URL.Path, Form: cloneValues(r.PostForm)})
+	f.mu.Unlock()
+	if !f.checkAuth(w, r) {
+		return
+	}
+	f.mu.Lock()
 	scripted := fakeResponse{}
 	if len(f.scriptPlace) > 0 {
 		scripted = f.scriptPlace[0]
@@ -282,6 +291,11 @@ func (f *fakeTwilio) serveUpdate(w http.ResponseWriter, r *http.Request) {
 	sid := sidFromPath(r.URL.Path)
 	f.mu.Lock()
 	f.updates = append(f.updates, fakeUpdate{SID: sid, Form: cloneValues(r.PostForm)})
+	f.mu.Unlock()
+	if !f.checkAuth(w, r) {
+		return
+	}
+	f.mu.Lock()
 	scripted := fakeResponse{}
 	if len(f.scriptUpdate) > 0 {
 		scripted = f.scriptUpdate[0]
