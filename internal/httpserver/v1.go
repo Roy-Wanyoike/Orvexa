@@ -22,6 +22,7 @@ import (
 	"github.com/Roy-Wanyoike/orvexa/internal/platform/outbox"
 	"github.com/Roy-Wanyoike/orvexa/internal/queues"
 	"github.com/Roy-Wanyoike/orvexa/internal/routing"
+	"github.com/Roy-Wanyoike/orvexa/internal/search"
 	"github.com/Roy-Wanyoike/orvexa/internal/telephony"
 	"github.com/Roy-Wanyoike/orvexa/internal/tenancy"
 	"github.com/Roy-Wanyoike/orvexa/internal/webhooks"
@@ -46,6 +47,10 @@ type DomainDeps struct {
 	AI             *ai.Runtime
 	Workflows      *workflows.Engine
 	Analytics      *analytics.Service
+	// Search is the OpenSearch-backed conversation search service ([O-27]).
+	// nil (or not configured) ⇒ the search route is not mounted and every
+	// other registration is byte-identical.
+	Search *search.Service
 }
 
 // MountV1 assembles the /api/v1 route tree.
@@ -111,8 +116,21 @@ func MountV1(r chi.Router, deps DomainDeps, limiter *httpx.RateLimit, webhookLim
 			MountAI(authed, deps.AI)
 			MountWorkflows(authed.With(identity.RequireCapability(string(identity.CapWorkflowRun))), deps.Workflows)
 			MountAnalytics(authed, deps.Analytics)
+			// [O-27] conversation search — tenant scope is enforced server-side
+			// from the authenticated principal; the service degrades to a typed
+			// 503 when OpenSearch is unreachable (never blocks other routes).
+			if deps.Search != nil {
+				MountSearchRoutes(authed, deps.Search, principalFromRequest)
+			}
 		})
 	})
+}
+
+// principalFromRequest adapts context-stored principals for search handlers;
+// a nil return means unauthenticated and the handler responds 401.
+func principalFromRequest(r *http.Request) *tenancy.Principal {
+	p, _ := tenancy.PrincipalFrom(r.Context())
+	return p
 }
 
 // webhookHandler ingests provider webhooks: bounded body, signature validated

@@ -17,9 +17,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Roy-Wanyoike/orvexa/internal/analytics"
+	"github.com/Roy-Wanyoike/orvexa/internal/analytics/clickhouse"
 	"github.com/Roy-Wanyoike/orvexa/internal/platform/bus"
 	"github.com/Roy-Wanyoike/orvexa/internal/platform/db"
 	"github.com/Roy-Wanyoike/orvexa/internal/platform/outbox"
+	"github.com/Roy-Wanyoike/orvexa/internal/search"
 	"github.com/Roy-Wanyoike/orvexa/internal/workflows"
 	"github.com/Roy-Wanyoike/orvexa/pkg/config"
 	"github.com/Roy-Wanyoike/orvexa/pkg/events"
@@ -83,16 +85,40 @@ func main() {
 	}
 	defer unsub()
 
-	// analytics consumer: facts pipeline (idempotent by event id)
+	// analytics consumer: facts pipeline (idempotent by event id).
+	// Sink selection ([O-26]): ClickHouse when ORVEXA_CLICKHOUSE_URL is set,
+	// otherwise the Postgres consumer — the documented byte-identical default.
 	facts := analytics.NewConsumer(pool)
-	unsubFacts, err := theBus.Subscribe("*", func(ctx context.Context, env *events.Envelope) error {
+	factsHandler := func(ctx context.Context, env *events.Envelope) error {
 		return facts.Handle(ctx, env)
-	})
+	}
+	chStore, err := clickhouse.FromEnv(log)
+	if err != nil {
+		log.Error("clickhouse facts store misconfigured", "err", err)
+		os.Exit(1)
+	}
+	if chStore != nil {
+		defer chStore.Close()
+		factsHandler = chStore.Handle
+		log.Info("analytics facts sink", "store", "clickhouse")
+	} else {
+		log.Info("analytics facts sink", "store", "postgres")
+	}
+	unsubFacts, err := theBus.Subscribe("*", factsHandler)
 	if err != nil {
 		log.Error("analytics consumer subscribe failed", "err", err)
 		os.Exit(1)
 	}
 	defer unsubFacts()
+
+	// conversation search indexer ([O-27]): bounded-queue projection into
+	// OpenSearch; disabled honestly (returns nil) when not configured.
+	searchSvc := search.NewService(search.NewServiceFromEnv())
+	indexer := search.NewIndexer(searchSvc, search.IndexerConfig{})
+	if err := indexer.Start(ctx, theBus); err != nil {
+		log.Error("search indexer subscribe failed", "err", err)
+		os.Exit(1)
+	}
 
 	// durable workflow executor: advance due workflows every 15s
 	eng := workflows.NewEngine(pool, outbox.NewWriter(pool), &workerServices{pool: pool}, "orvexa-worker")
