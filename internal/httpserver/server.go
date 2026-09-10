@@ -36,7 +36,9 @@ func New(d Deps) http.Handler {
         r.Get("/healthz", handleLiveness)
         r.Get("/readyz", handleReadiness(d.Pool))
 
-        MountV1(r, d.Domain, d.Limiter, d.Logger)
+        // authenticated API traffic: per-key limits
+        // webhook ingress: per-IP limits (providers don't hold API keys)
+        MountV1(r, d.Domain, d.Limiter, httpx.NewRateLimit(120, 60, 10_000), d.Logger)
         return r
 }
 
