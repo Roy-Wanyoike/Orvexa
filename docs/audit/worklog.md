@@ -121,3 +121,65 @@ bus (route 404s today by design until mounted); dropped events recover only
 via later events or a reindex-from-outbox job (reindex tool tracked
 separately); integration evidence on a real cluster pending a
 compose-capable runner.
+
+## W-C3c — Data Engineer (ClickHouse facts) — issue #35 [O-26]
+
+**Branch:** `feat/clickhouse-facts` — continued from 4 pushed commits (store,
+env gating, fake-driver tests, knob tests) + 3 dirty items; ended at PR
+"feat(analytics): ClickHouse facts writer — batched, non-blocking, env-gated
+(#35)".
+
+**Completion path (C3c):**
+- Reviewed the pushed store end-to-end (buffering/backpressure model, flusher
+  ownership, flush-on-close, requeue/shed policy); `go test -race
+  ./internal/analytics/...` green before any change.
+- `migrations/0011_clickhouse_facts.sql` completed: header documents the
+  engine-specific contract (NOT applied by the PG runners — applied via
+  compose init on first volume init, or manually with
+  `clickhouse-client --multiquery`); event type = target table mirroring the
+  Postgres consumer's topic routing; sort key
+  `(tenant_id, toStartOfHour(occurred_at), event_id)` — per-tenant hourly
+  dashboard layout with `event_id` as the uniqueness tiebreaker so
+  ReplacingMergeTree FINAL collapses redeliveries only (a bare
+  `(tenant_id, toStartOfHour(ts))` key would collapse ALL distinct events per
+  tenant-hour — data loss); monthly partitions + 13-month TTL.
+- Salvage verdict on the dirty Makefile/devstack.sh diffs: functionally
+  correct and ClickHouse-related (both PG runners skip `*clickhouse*` files),
+  but the devstack.sh heredoc had tabs converted to spaces repo-wide (~230
+  lines of whitespace churn, embedded pgtool no longer gofmt-clean). Reset and
+  re-applied whitespace-faithfully; added the missed `PGTOOL_SRC_VERSION`
+  bump 3→4 (without it a stale pgtool would feed ClickHouse DDL to pgx and
+  fail the migration loop).
+- `docker-compose.dev.yml` additive `clickhouse:24` (native 19000 / HTTP 18123
+  host ports mirroring the 55432 convention, `clickhouse-client` healthcheck,
+  nofile ulimits) + init-script mount of 0011 + `orvexa-dev-clickhouse`
+  volume; merged latest `origin/main` first (#74 relocated temporal services
+  and added `opensearch`) — no conflicts.
+- Added the missing integration-tagged evidence test
+  (`internal/analytics/clickhouse/integration_test.go`, `//go:build
+  integration`, env-gated on `ORVEXA_TEST_CLICKHOUSE_URL` / fallback
+  `ORVEXA_CLICKHOUSE_URL`, skip-clean): re-applies the idempotent 0011 DDL,
+  drives facts + a byte-identical redelivery through the real batching path,
+  asserts FINAL dedup, Summary group-by shape and sum(amount) against a live
+  engine.
+- `go mod tidy`: clickhouse-go/v2 → direct (stale `// indirect` marker), same
+  fix for nats.go/temporal/websocket (direct since #72/#73); stale unused
+  indirects pruned; go.sum graph completed.
+- Docs: additive `docs/devstack.md` ClickHouse section (gate contract, compose
+  path, DDL application paths, retention notes, knobs, evidence command).
+
+**Verification:** `gofmt -l .` empty · `go vet ./...` clean · `go build ./...`
+clean (also `-tags=integration`, `-tags=temporal`) · `go test -race ./...`
+exit 0 (30 packages ok, 0 FAIL) · `make lint-todos` clean · `make migrations`
+stub-psql dry run: 0001–0010 apply, 0011 skipped · devstack.sh `bash -n` +
+extracted embedded pgtool gofmt/vet/build clean · compose YAML parsed
+(services/volumes verified) · integration test skips cleanly without env
+(live-engine evidence pending a compose-capable runner — no docker in the
+authoring sandbox).
+
+**Risks / follow-ups:** worker-side wiring of `clickhouse.FromEnv` behind
+`ORVEXA_CLICKHOUSE_URL` is outside this task's exclusive file scope (selection
+point is exported and documented); `go vet -tags="temporal integration"` flags
+a pre-existing `internal/workflows/temporaldriver/integration_test.go:88`
+compile error inherited from #34 (unrelated, untouched); 13-month TTL is a
+placeholder until formal retention policy lands.
