@@ -20,6 +20,8 @@ import (
 	"github.com/Roy-Wanyoike/orvexa/internal/analytics"
 	"github.com/Roy-Wanyoike/orvexa/internal/cases"
 	"github.com/Roy-Wanyoike/orvexa/internal/comms"
+	"github.com/Roy-Wanyoike/orvexa/internal/comms/factory"
+	"github.com/Roy-Wanyoike/orvexa/internal/comms/registry"
 	"github.com/Roy-Wanyoike/orvexa/internal/conversations"
 	"github.com/Roy-Wanyoike/orvexa/internal/customers"
 	"github.com/Roy-Wanyoike/orvexa/internal/httpserver"
@@ -48,6 +50,16 @@ func main() {
 	}
 	log := logging.New(cfg.LogLevel, "orvexa-api", cfg.Env)
 	slog := httpx.Logger(func(msg string, args ...any) { log.Info(msg, args...) })
+
+	// communications provider selection (issue #32): parse + validate the
+	// provider configuration at startup, fail-closed and independent of the
+	// database state. The error names the offending env vars (never values).
+	telCfg, msgCfg, err := registry.LoadFromEnv()
+	if err != nil {
+		log.Error("communications provider configuration invalid", "err", err)
+		fmt.Fprintln(os.Stderr, "communications provider configuration invalid:", err)
+		os.Exit(1)
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -78,19 +90,34 @@ func main() {
 		deps.Queues = queues.NewService(pool)
 		deps.Cases = cases.NewService(pool, writer, "orvexa-api")
 
-		// communications plane: simulator provider + signed-webhook loop
+		// communications plane: provider factory ([O-23]) + signed-webhook loop.
+		// A real provider replaces the simulator plane-by-plane; unset planes
+		// boot the simulator and say so honestly (LogSelection below). Every
+		// provider — real or simulated — delivers through the same fail-closed
+		// gateway entry, so nothing bypasses signature validation.
 		secret := cfg.WebhookHMACSecret
-		sim := comms.NewSimulator(
-			func(ctx context.Context, provider string, body []byte, signature string) error {
-				_, err := gateway.Ingest(ctx, provider, body, signature)
-				return err
-			},
-			func(body []byte) string { return webhooks.ComputeSignature(secret, body) },
-			0, // synchronous progression; production-like pacing via config
-		)
+		ingest := func(ctx context.Context, provider string, body []byte, signature string) error {
+			_, err := gateway.Ingest(ctx, provider, body, signature)
+			return err
+		}
+		voice, messenger, teardownComms, err := factory.Build(ctx, factory.Config{
+			Telephony: telCfg,
+			Messaging: msgCfg,
+			Ingest:    ingest,
+			Signer:    func(body []byte) string { return webhooks.ComputeSignature(secret, body) },
+		})
+		if err != nil {
+			log.Error("communications provider construction failed", "err", err)
+			fmt.Fprintln(os.Stderr, "communications provider construction failed:", err)
+			os.Exit(1)
+		}
+		factory.LogSelection(log, "telephony", string(telCfg.Provider))
+		factory.LogSelection(log, "messaging", string(msgCfg.Provider))
+		defer teardownComms() // graceful: session-based adapters close after the server drains
+
 		deps.CommsProcessor = &comms.Processor{Interactions: interactionSvc}
-		deps.Calls = telephony.NewService(interactionSvc, sim)
-		deps.Messages = messaging.NewService(interactionSvc, sim)
+		deps.Calls = telephony.NewService(interactionSvc, voice)
+		deps.Messages = messaging.NewService(interactionSvc, messenger)
 		deps.Routing = routing.NewService(pool, routing.NewPresenceStore(pool, 2*time.Second), writer, "orvexa-api")
 
 		// intelligence plane: rules provider (deterministic) + tool gateway
@@ -208,10 +235,10 @@ type dbToolPolicy struct {
 
 func (d *dbToolPolicy) Allowlist(ctx context.Context, tenantID, agentID string) (map[string]int, error) {
 	rows, err := d.pool.Query(ctx, `
-		SELECT t.tool_name, t.max_calls_per_invocation
-		FROM ai_agent_tools t
-		JOIN ai_agents a ON a.id = t.agent_id
-		WHERE a.id = $1 AND a.tenant_id = $2 AND t.allowed`, agentID, tenantID)
+                SELECT t.tool_name, t.max_calls_per_invocation
+                FROM ai_agent_tools t
+                JOIN ai_agents a ON a.id = t.agent_id
+                WHERE a.id = $1 AND a.tenant_id = $2 AND t.allowed`, agentID, tenantID)
 	if err != nil {
 		return nil, apperrors.Internal("db.read_failed", "policy lookup failed").WithCause(err)
 	}

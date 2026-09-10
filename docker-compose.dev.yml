@@ -6,6 +6,7 @@
 #
 #   ORVEXA_DATABASE_URL=postgres://postgres:postgres@127.0.0.1:55432/orvexa?sslmode=disable
 #   ORVEXA_NATS_URL=nats://localhost:4222
+#   ORVEXA_OPENSEARCH_URL=http://localhost:9200   (issue #36 — optional; unset = search off)
 #
 # Usage:   docker compose -f docker-compose.dev.yml up -d
 # Stop:    docker compose -f docker-compose.dev.yml down
@@ -71,8 +72,67 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  # Conversation search backend (issue #36). OPTIONAL dependency: the platform
+  # boots and serves every non-search route with ORVEXA_OPENSEARCH_URL unset —
+  # search degrades to the typed 503 search.not_configured instead.
+  opensearch:
+    image: opensearchproject/opensearch:2
+    container_name: orvexa-dev-opensearch
+    environment:
+      discovery.type: single-node
+      bootstrap.memory_lock: "true"
+      # Dev-sized heap; single node, no replicas (index template in
+      # internal/search matches).
+      OPENSEARCH_JAVA_OPTS: -Xms512m -Xmx512m
+      # Dev only: HTTP (no TLS) and no auth plugin. Production deployments
+      # terminate TLS/auth in front of the cluster — never run this profile
+      # outside loopback.
+      plugins.security.disabled: "true"
+      compatibility.override_main_response_version: "true"
+    ports:
+      # Matches ORVEXA_OPENSEARCH_URL default (http://localhost:9200).
+      - "9200:9200"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - orvexa-dev-osdata:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+
+  # Temporal (optional profile: docker compose --profile temporal up)
+  # Adopted only by deployments building with -tags=temporal (ADR-0009).
+  # (Relocated under services: during the #36 merge — main's append had
+  # nested these definitions under the volumes: key, which is not a valid
+  # compose service placement.)
+  temporal:
+    image: temporalio/auto-setup:1.25.2
+    profiles: ["temporal"]
+    ports: ["7233:7233"]
+    environment:
+      - DB=postgresql
+      - POSTGRES_SEEDS=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PWD=postgres
+    depends_on: [postgres]
+  temporal-ui:
+    image: temporalio/ui:2.26.2
+    profiles: ["temporal"]
+    ports: ["8081:8080"]
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+    depends_on: [temporal]
+
 volumes:
   orvexa-dev-pgdata:
+<<<<<<< HEAD
 
   # Temporal (optional profile: docker compose --profile temporal up)
   # Adopted only by deployments building with -tags=temporal (ADR-0009).
@@ -93,3 +153,6 @@ volumes:
     environment:
       - TEMPORAL_ADDRESS=temporal:7233
     depends_on: [temporal]
+=======
+  orvexa-dev-osdata:
+>>>>>>> origin/main

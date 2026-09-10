@@ -15,6 +15,7 @@ import (
 	"github.com/Roy-Wanyoike/orvexa/internal/comms"
 	"github.com/Roy-Wanyoike/orvexa/internal/conversations"
 	"github.com/Roy-Wanyoike/orvexa/internal/customers"
+	"github.com/Roy-Wanyoike/orvexa/internal/identity"
 	"github.com/Roy-Wanyoike/orvexa/internal/interactions"
 	"github.com/Roy-Wanyoike/orvexa/internal/messaging"
 	"github.com/Roy-Wanyoike/orvexa/internal/platform/httpx"
@@ -53,14 +54,35 @@ type DomainDeps struct {
 // IP-rate-limited, because providers cannot hold API keys. Everything else
 // requires an authenticated principal: scopes gate action classes and the
 // tenant ALWAYS derives from the API key, never from request bodies.
-func MountV1(r chi.Router, deps DomainDeps, limiter *httpx.RateLimit, webhookLimiter *httpx.RateLimit, log httpx.Logger) {
+//
+// [O-29] (issue #38) additive identity surface: when identitySvc is non-nil
+// (ORVEXA_OIDC_* configured or Deps.Identity wired) two public login
+// endpoints mount outside the authenticated group, the group switches to
+// dual-auth (OIDC Bearer OR unchanged API-key chain) and capability
+// middleware gates the interaction/case/workflow resources. identitySvc nil
+// ⇒ every registration below is byte-identical to the pre-[O-29] tree.
+func MountV1(r chi.Router, deps DomainDeps, limiter *httpx.RateLimit, webhookLimiter *httpx.RateLimit, log httpx.Logger, identitySvc *identity.Service) {
 	r.Route("/api/v1", func(v1 chi.Router) {
 		// public ingress — hardened webhook gateway
 		v1.Post("/webhooks/{provider}", webhookHandler(deps.Webhooks, deps.CommsProcessor, webhookLimiter))
 
+		// [O-29] public identity endpoints — they bootstrap authentication and
+		// must stay outside the authenticated group (no cookies, stateless).
+		if identitySvc != nil {
+			v1.Get("/identity/authorize-url", identitySvc.AuthorizeURLHandler())
+			v1.Get("/identity/callback", identitySvc.CallbackHandler())
+		}
+
 		auth := tenancy.AuthMiddleware(deps.Tenancy, "api", limiter, log)
 		v1.Group(func(authed chi.Router) {
-			authed.Use(auth)
+			if identitySvc != nil {
+				// [O-29] dual-auth: JWT-shaped Bearer credentials are verified by
+				// the identity plane; every other credential shape is delegated
+				// to the unchanged API-key chain below.
+				authed.Use(identitySvc.DualAuth(auth, limiter))
+			} else {
+				authed.Use(auth)
+			}
 
 			authed.Get("/", func(w http.ResponseWriter, _ *http.Request) {
 				httpx.WriteJSON(w, http.StatusOK, map[string]any{
@@ -72,16 +94,22 @@ func MountV1(r chi.Router, deps DomainDeps, limiter *httpx.RateLimit, webhookLim
 			})
 
 			MountCustomers(authed, deps.Customers)
-			MountConversations(authed, deps.Conversations, deps.Interactions)
-			MountInteractions(authed, deps.Interactions)
+			// [O-29] capability RBAC (additive): OIDC principals must hold the
+			// capability granted by their role binding (read on GET/HEAD, write
+			// otherwise); API-key principals carrying the legacy blanket scopes
+			// ("api"/"*") or the capability minted as a scope pass unchanged.
+			MountConversations(authed.With(identity.RequireMethodCapability(identity.CapInteractionRead, identity.CapInteractionWrite)),
+				deps.Conversations, deps.Interactions)
+			MountInteractions(authed.With(identity.RequireMethodCapability(identity.CapInteractionRead, identity.CapInteractionWrite)),
+				deps.Interactions)
 			MountAgents(authed, deps.Agents)
 			MountQueues(authed, deps.Queues)
-			MountCases(authed, deps.Cases)
+			MountCases(authed.With(identity.RequireMethodCapability(identity.CapCaseRead, identity.CapCaseWrite)), deps.Cases)
 			MountCalls(authed, deps.Calls)
 			MountMessages(authed, deps.Messages)
 			MountRouting(authed, deps.Routing)
 			MountAI(authed, deps.AI)
-			MountWorkflows(authed, deps.Workflows)
+			MountWorkflows(authed.With(identity.RequireCapability(string(identity.CapWorkflowRun))), deps.Workflows)
 			MountAnalytics(authed, deps.Analytics)
 		})
 	})

@@ -48,6 +48,23 @@ Domains commit state **and** their events in one SQL transaction (`outbox.Writer
 
 `telephony.VoiceProvider` and `messaging.MessagingProvider` are the only interfaces to carriers. Every provider — including the built-in simulator — reports lifecycle progress by delivering **HMAC-signed webhooks** through the same public gateway. The processor applies them idempotently to the interaction lifecycle (same-state = no-op). Details: [ADR-0005](adr/0005-provider-agnostic-communications.md).
 
+### Provider selection
+
+At startup `cmd/api` loads both planes through `internal/comms/registry` (`registry.LoadFromEnv`): selection is one env var per plane, unknown names / plane mismatches / missing credentials are **fail-closed startup errors that name the offending env vars** (never their values). `internal/comms/factory` then constructs the adapters and wires every one of them — real or simulated — to the same signed-webhook ingest path (`webhooks.Gateway.Ingest` + `webhooks.ComputeSignature`), so no provider ever bypasses signature validation. Unset planes boot the **simulator** and log it explicitly: `provider=simulator reason=not_configured`. Session-based adapters (FreeSWITCH ESL, Asterisk AMI) are closed gracefully on shutdown.
+
+| Plane | `ORVEXA_TELEPHONY_PROVIDER` / `ORVEXA_MESSAGING_PROVIDER` value | Credentials (voice · messaging) | Notes |
+|---|---|---|---|
+| both | `simulator` *(default when unset)* | none | Built-in deterministic carrier, zero network I/O; honest startup log `provider=simulator reason=not_configured` |
+| voice | `twilio` | `ORVEXA_TWILIO_ACCOUNT_SID`, `ORVEXA_TWILIO_AUTH_TOKEN`, `ORVEXA_TWILIO_FROM_NUMBER` | REST + TwiML; TwiML/callback/hold document URLs are deployment endpoints supplied through the factory config — `PlaceCall`/`Hold` fail with typed errors naming the missing knob until provisioned |
+| messaging | `twilio` | same three vars as voice | REST; status-callback base URL optional — unset means fire-and-forget sends without receipts (documented posture) |
+| messaging | `whatsappcloud` | `ORVEXA_WHATSAPP_PHONE_NUMBER_ID`, `ORVEXA_WHATSAPP_ACCESS_TOKEN`, `ORVEXA_WHATSAPP_APP_SECRET`, `ORVEXA_WHATSAPP_VERIFY_TOKEN` | Meta Graph v21; 24h window contract per adapter README |
+| voice | `africastalking` | `ORVEXA_AT_USERNAME`, `ORVEXA_AT_API_KEY`, `ORVEXA_AT_VOICE_PRODUCT_CODE` | Voice REST (`voice.africastalking.com`); status callbacks flow through the signed path |
+| messaging | `africastalking` | `ORVEXA_AT_USERNAME`, `ORVEXA_AT_API_KEY`, `ORVEXA_AT_SENDER_ID` | Sender ID is required at boot (fail-closed: per-send failures without one are expensive to diagnose) |
+| voice | `freeswitch` | `ORVEXA_FREESWITCH_HOST`, `ORVEXA_FREESWITCH_PORT` *(default 8021)*, `ORVEXA_FREESWITCH_PASSWORD` | Self-hosted ESL; persistent TCP session, closed on teardown |
+| voice | `asterisk` | `ORVEXA_ASTERISK_HOST`, `ORVEXA_ASTERISK_PORT` *(default 5038)*, `ORVEXA_ASTERISK_USERNAME`, `ORVEXA_ASTERISK_SECRET` | Self-hosted AMI; Challenge→MD5 login, persistent session closed on teardown |
+
+Least privilege: only the selected provider's variables are read. Credentials are typed `Secret` and rendered redacted on every logging/JSON path (see `internal/comms/registry/doc.go`).
+
 ## AI boundary
 
 The AI gateway is the only path to providers (caps: max tokens, timeout, retry classification; every invocation metered as `usage.recorded`). The tool gateway is the only path from AI to side-effects: per-agent allowlists, deny-by-default schemas, rate windows, and audit of every decision including refusals. AI holds no credentials. Details: [ADR-0006](adr/0006-durable-workflows.md) companion principles in [ADR-0001](adr/0001-modular-distributed-architecture.md).
