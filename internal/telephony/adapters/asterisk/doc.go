@@ -4,20 +4,22 @@
 // the most widely installed self-hosted PBX estate without an intermediary
 // trunk service.
 //
-// Layering (three files, three concerns):
+// Layering (five files, four concerns):
 //
-//	ami.go    — the wire codec: "Key: value" header blocks framed by blank
-//	            lines (\r\n\r\n; bare \n accepted), with bounded line, header
-//	            and packet sizes, and the Challenge→MD5 login key derivation.
-//	client.go — the AMI session: dial + banner + challenge/login handshake,
-//	          a single reader goroutine fanning responses to per-ActionID
-//	          waiters and events to the adapter, a mutex-guarded writer,
-//	          per-action timeouts, a keepalive knob, and a supervisor that
-//	          reconnects with bounded exponential backoff until Close.
-//	adapter.go — the voice plane translation: PlaceCall/Hangup/Transfer/
-//	          Hold/Resume mapped to Originate/Hangup/Redirect actions, and
-//	          Newstate/Hangup events translated into comms.ProviderEvent
-//	          deliveries on the platform's webhook path (comms.IngestFunc).
+//	ami.go     — the wire codec: "Key: value" header blocks framed by blank
+//	             lines (\r\n\r\n; bare \n accepted), with bounded line, header
+//	             and packet sizes, and the Challenge→MD5 login key derivation.
+//	conn.go    — the AMI session: dial + banner + challenge/login handshake,
+//	             a single reader goroutine fanning responses to per-ActionID
+//	             waiters and events to the adapter, a mutex-guarded writer,
+//	             per-action timeouts, a keepalive knob, and a supervisor that
+//	             reconnects with bounded exponential backoff until Close.
+//	voice.go   — the voice plane commands: PlaceCall/Hangup/Transfer/Hold/
+//	             Resume mapped to Originate/Hangup/Redirect actions, with leg
+//	             state and tenant context tracked per interaction.
+//	events.go  — the voice plane observations: Newstate/Hangup events
+//	             translated into comms.ProviderEvent deliveries on the
+//	             platform's webhook path (comms.IngestFunc).
 //
 // Correlation: async Originate carries ActionID = the platform interaction id
 // (telephony.ProviderRef convention). The channel name from the Originate
