@@ -110,3 +110,7 @@ func (s *Service) TouchKey(ctx context.Context, keyID string) {
 func ConstantTimeEqual(a, b string) bool {
 	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
 }
+
+// ErrAuthRequired is the sentinel for transports needing explicit auth
+// errors (e.g. realtime upgrades).
+var ErrAuthRequired = apperrors.Unauth("auth.missing_key", "missing API key")
