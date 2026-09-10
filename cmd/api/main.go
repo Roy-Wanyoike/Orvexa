@@ -17,6 +17,7 @@ import (
 
 	"github.com/Roy-Wanyoike/orvexa/internal/agents"
 	"github.com/Roy-Wanyoike/orvexa/internal/cases"
+	"github.com/Roy-Wanyoike/orvexa/internal/comms"
 	"github.com/Roy-Wanyoike/orvexa/internal/conversations"
 	"github.com/Roy-Wanyoike/orvexa/internal/customers"
 	"github.com/Roy-Wanyoike/orvexa/internal/httpserver"
@@ -25,6 +26,8 @@ import (
 	"github.com/Roy-Wanyoike/orvexa/internal/platform/httpx"
 	"github.com/Roy-Wanyoike/orvexa/internal/platform/outbox"
 	"github.com/Roy-Wanyoike/orvexa/internal/queues"
+	"github.com/Roy-Wanyoike/orvexa/internal/messaging"
+	"github.com/Roy-Wanyoike/orvexa/internal/telephony"
 	"github.com/Roy-Wanyoike/orvexa/internal/tenancy"
 	"github.com/Roy-Wanyoike/orvexa/internal/webhooks"
 	"github.com/Roy-Wanyoike/orvexa/pkg/config"
@@ -59,13 +62,29 @@ func main() {
 	deps := httpserver.DomainDeps{Tenancy: tenancy.NewService(pool)}
 	if pool != nil {
 		writer := outbox.NewWriter(pool)
-		deps.Webhooks = webhooks.NewGateway(pool, cfg.WebhookHMACSecret)
+		gateway := webhooks.NewGateway(pool, cfg.WebhookHMACSecret)
+		deps.Webhooks = gateway
 		deps.Customers = customers.NewService(pool)
 		deps.Conversations = conversations.NewService(pool, writer, "orvexa-api")
-		deps.Interactions = interactions.NewService(pool, writer, "orvexa-api")
+		interactionSvc := interactions.NewService(pool, writer, "orvexa-api")
+		deps.Interactions = interactionSvc
 		deps.Agents = agents.NewService(pool)
 		deps.Queues = queues.NewService(pool)
 		deps.Cases = cases.NewService(pool, writer, "orvexa-api")
+
+		// communications plane: simulator provider + signed-webhook loop
+		secret := cfg.WebhookHMACSecret
+		sim := comms.NewSimulator(
+			func(ctx context.Context, provider string, body []byte, signature string) error {
+				_, err := gateway.Ingest(ctx, provider, body, signature)
+				return err
+			},
+			func(body []byte) string { return webhooks.ComputeSignature(secret, body) },
+			0, // synchronous progression; production-like pacing via config
+		)
+		deps.CommsProcessor = &comms.Processor{Interactions: interactionSvc}
+		deps.Calls = telephony.NewService(interactionSvc, sim)
+		deps.Messages = messaging.NewService(interactionSvc, sim)
 		deps.Writer = writer
 	}
 

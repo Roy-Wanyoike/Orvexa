@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"time"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/Roy-Wanyoike/orvexa/internal/agents"
 	"github.com/Roy-Wanyoike/orvexa/internal/cases"
+	"github.com/Roy-Wanyoike/orvexa/internal/comms"
 	"github.com/Roy-Wanyoike/orvexa/internal/conversations"
 	"github.com/Roy-Wanyoike/orvexa/internal/customers"
 	"github.com/Roy-Wanyoike/orvexa/internal/interactions"
@@ -17,6 +19,8 @@ import (
 	"github.com/Roy-Wanyoike/orvexa/internal/queues"
 	"github.com/Roy-Wanyoike/orvexa/internal/tenancy"
 	"github.com/Roy-Wanyoike/orvexa/internal/webhooks"
+	"github.com/Roy-Wanyoike/orvexa/internal/messaging"
+	"github.com/Roy-Wanyoike/orvexa/internal/telephony"
 )
 
 // DomainDeps bundles the services the v1 API exposes.
@@ -30,6 +34,9 @@ type DomainDeps struct {
 	Tenancy       *tenancy.Service
 	Writer        *outbox.Writer
 	Webhooks      *webhooks.Gateway
+	CommsProcessor *comms.Processor
+	Calls         *telephony.Service
+	Messages      *messaging.Service
 }
 
 // MountV1 assembles the /api/v1 route tree.
@@ -41,7 +48,7 @@ type DomainDeps struct {
 func MountV1(r chi.Router, deps DomainDeps, limiter *httpx.RateLimit, webhookLimiter *httpx.RateLimit, log httpx.Logger) {
 	r.Route("/api/v1", func(v1 chi.Router) {
 		// public ingress — hardened webhook gateway
-		v1.Post("/webhooks/{provider}", webhookHandler(deps.Webhooks, webhookLimiter))
+		v1.Post("/webhooks/{provider}", webhookHandler(deps.Webhooks, deps.CommsProcessor, webhookLimiter))
 
 		auth := tenancy.AuthMiddleware(deps.Tenancy, "api", limiter, log)
 		v1.Group(func(authed chi.Router) {
@@ -62,13 +69,15 @@ func MountV1(r chi.Router, deps DomainDeps, limiter *httpx.RateLimit, webhookLim
 			MountAgents(authed, deps.Agents)
 			MountQueues(authed, deps.Queues)
 			MountCases(authed, deps.Cases)
+			MountCalls(authed, deps.Calls)
+			MountMessages(authed, deps.Messages)
 		})
 	})
 }
 
 // webhookHandler ingests provider webhooks: bounded body, signature validated
 // inside the gateway, IP-rate-limited, no business logic in the handler.
-func webhookHandler(g *webhooks.Gateway, limiter *httpx.RateLimit) http.HandlerFunc {
+func webhookHandler(g *webhooks.Gateway, processor *comms.Processor, limiter *httpx.RateLimit) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if g == nil {
 			httpx.WriteError(w, errWebhookUnavailable)
@@ -94,7 +103,24 @@ func webhookHandler(g *webhooks.Gateway, limiter *httpx.RateLimit) http.HandlerF
 		if !res.Duplicate {
 			status = http.StatusAccepted
 		}
-		httpx.WriteJSON(w, status, res, nil)
+		// processing: the persisted ledger event is applied to the domain
+		// immediately (crash between ingest and process is recoverable from
+		// the provider_events ledger — reaper tracked in the infra wave).
+		processed := true
+		if processor != nil {
+			var ev comms.ProviderEvent
+			if err := json.Unmarshal(body, &ev); err == nil {
+				if perr := processor.Process(r.Context(), &ev); perr != nil {
+					// surfaced, never swallowed: carriers retry non-2xx;
+					// gateway dedup keeps replays single-effect.
+					httpx.WriteError(w, perr)
+					return
+				}
+			}
+		}
+		httpx.WriteJSON(w, status, map[string]any{
+			"event_id": res.EventID, "duplicate": res.Duplicate, "accepted": res.Accepted, "processed": processed,
+		}, nil)
 	}
 }
 
