@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache: true
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test (race)
+        run: go test -race -coverprofile=coverage.txt ./...
+
+      - name: Migration sanity (ordered, non-empty)
+        run: |
+          count=$(ls migrations/*.sql | wc -l)
+          test "$count" -ge 1
+          for f in migrations/*.sql; do test -s "$f"; done
+          echo "migrations ok: $count files"
