@@ -41,6 +41,8 @@ Binaries marked *reserved* exist as processes when their wave lands; until then 
 | `analytics` | *_fact | platform (events only) |
 | `audit` | audit_events | platform (events only) |
 
+Intent-vs-shipped note (2026-09-11 repository audit, drift item D6): the table above records this ADR's original intent. The shipped schema models voice and messaging as **`interactions`** (there are no `calls`/`messages` tables) and has no `consents` table; `agent_presence` landed under `routing` rather than `agents`. The ownership rule itself is unchanged — modules still own their tables and may not reach into another module's storage; the authoritative shipped map is `docs/domains.md`.
+
 ### Dependency rule
 
 Modules communicate through (1) published domain events, (2) explicitly defined interfaces, or (3) the HTTP API. Importing another module's repository/storage is forbidden. `pkg/*` depends on nothing internal.
