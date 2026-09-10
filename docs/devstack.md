@@ -112,6 +112,8 @@ resolved version in `.devstack/state.env`. Update the pin in a follow-up PR.
 
 ```bash
 docker compose -f docker-compose.dev.yml up -d          # postgres:16 + redis:7 + nats:2.10-jetstream
+# optional, env-gated engines (inert until their ORVEXA_*_URL is set):
+#   clickhouse:24 (issue #35, see below) / opensearch:2 (issue #36)
 ORVEXA_TEST_DATABASE_URL='postgres://postgres:postgres@127.0.0.1:55432/orvexa?sslmode=disable' make integration
 docker compose -f docker-compose.dev.yml down           # add -v to drop data
 ```
@@ -119,6 +121,87 @@ docker compose -f docker-compose.dev.yml down           # add -v to drop data
 Same env contract and the same host port (55432) as the userland path, so
 tooling is identical. Migrations are applied by the authoritative lexical-order
 path (`make migrations` or the devstack), not by container entrypoints.
+
+## ClickHouse facts engine (issue #35, optional)
+
+The analytics facts pipeline has an optional OLAP backend ([O-26]): with
+`ORVEXA_CLICKHOUSE_URL` **unset or empty** the worker keeps appending facts to
+PostgreSQL (`internal/analytics`, migration 0010) — byte-identical fallback,
+zero drift. When the URL is set, the batched, backpressure-safe store in
+`internal/analytics/clickhouse` appends there instead (never both).
+
+### Compose path (dev)
+
+```bash
+docker compose -f docker-compose.dev.yml up -d clickhouse
+# Gate contract consumed by the analytics worker's facts-store selection
+# (clickhouse.FromEnv): set → ClickHouse store, unset → PostgreSQL path.
+ORVEXA_CLICKHOUSE_URL=clickhouse://default@127.0.0.1:19000/default
+```
+
+> **Wiring note:** `clickhouse.FromEnv` (internal/analytics/clickhouse) is the
+> selection point the worker wires behind `ORVEXA_CLICKHOUSE_URL`; the store,
+> gating and tests live in the package. Docker-free machines apply the DDL
+> manually (command below) instead of via compose init.
+
+| Aspect | Value |
+| --- | --- |
+| Image / container | `clickhouse/clickhouse-server:24` / `orvexa-dev-clickhouse` |
+| Host ports | `19000` (native, clickhouse-go) · `18123` (HTTP) — non-standard like PG's `55432`, a local engine keeps `9000`/`8123` |
+| DDL | `migrations/0011_clickhouse_facts.sql` is mounted into `/docker-entrypoint-initdb.d/` — applied on **first init** of the `orvexa-dev-clickhouse` volume only |
+| Wipe | `docker compose -f docker-compose.dev.yml down -v` drops facts; DDL re-applies on the next first-init |
+| Auth | Dev default (no password), loopback posture — same as the stack's `redis`/`nats` |
+
+### Engine-specific migration (0011) — why the PG runners skip it
+
+`migrations/0011_clickhouse_facts.sql` is **ClickHouse DDL, not PostgreSQL**.
+Both PostgreSQL runners skip every `migrations/*clickhouse*.sql` file by name
+convention (`make migrations` and both `scripts/devstack.sh` runners print an
+explicit skip line). Apply it manually to an existing server/volume:
+
+```bash
+clickhouse-client --multiquery --host 127.0.0.1 --port 9000 \
+  < migrations/0011_clickhouse_facts.sql
+```
+
+Schema in one line: `interaction_fact` / `usage_fact` (event type = target
+table, mirroring the Postgres consumer's topic routing), ReplacingMergeTree
+engines keyed `(tenant_id, toStartOfHour(occurred_at), event_id)` — per-tenant
+hourly dashboard layout, with `event_id` as the uniqueness tiebreaker so FINAL
+collapses redeliveries only (at-least-once bus delivery) — monthly partitions,
+`DateTime64(3,'UTC')` for TIMESTAMPTZ parity.
+
+### Retention notes
+
+- Retention is enforced **server-side**: `TTL occurred_at + INTERVAL 13 MONTH`
+  (a full trailing year of dashboards plus slack) — no purge job exists to
+  forget. Monthly partitions make eviction part-level and cheap.
+- 13 months is a starting point; when a formal retention policy lands, adjust
+  the `INTERVAL` in 0011 (and `ALTER TABLE ... MODIFY TTL` on live volumes).
+- Strict reads over facts (dedup visibility) must use `FINAL` — see the
+  store's integration test for the canonical query shapes.
+
+### Tuning knobs (all optional; safe defaults)
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `ORVEXA_CLICKHOUSE_URL` | *(unset)* | Gate + DSN (`clickhouse://…:9000/db` native or `http://…:8123/db`) |
+| `ORVEXA_CLICKHOUSE_MAX_BATCH_ROWS` | `1000` | Buffered rows before a flush |
+| `ORVEXA_CLICKHOUSE_FLUSH_INTERVAL` | `2s` | Background flush cadence |
+| `ORVEXA_CLICKHOUSE_WRITE_TIMEOUT` | `5s` | Per-flush (and dial) timeout |
+| `ORVEXA_CLICKHOUSE_ENQUEUE_TIMEOUT` | `5s` | How long `Handle` blocks when the bounded buffer is full before failing with `analytics.clickhouse_backpressure` |
+
+### Integration evidence
+
+```bash
+ORVEXA_TEST_CLICKHOUSE_URL=clickhouse://default@127.0.0.1:19000/default \
+  go test -race -tags=integration -v ./internal/analytics/clickhouse
+```
+
+The test skips cleanly when neither env var is set. It re-applies the
+idempotent 0011 DDL, streams facts plus a byte-identical redelivery through
+the real batching path, and asserts FINAL dedup + aggregation shape + amounts
+against the live engine (evidence logged with `t.Logf`).
 
 ## How the integration suite consumes the devstack
 

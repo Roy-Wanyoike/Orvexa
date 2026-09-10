@@ -192,7 +192,7 @@ pg_env() {
 # real wire protocol — a STRICTER readiness signal than a TCP ping.
 PGTOOL_DIR="${ROOT}/tools/pgtool"
 PGTOOL_BIN="${PGTOOL_DIR}/pgtool"
-PGTOOL_SRC_VERSION="3"   # bump when the embedded main.go below changes
+PGTOOL_SRC_VERSION="4"   # bump when the embedded main.go below changes (4: skip engine-specific migrations, issue #35)
 PGTOOL_STAMP="${PGTOOL_DIR}/main.go.stamp"
 
 ensure_pgtool() {
@@ -218,6 +218,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -285,6 +286,12 @@ func migrate(ctx context.Context, url, dir string) {
 	sort.Strings(paths)
 	for _, p := range paths {
 		version := filepath.Base(p)
+		// Engine-specific migrations (e.g. *clickhouse*, issue #35) are not
+		// PostgreSQL DDL; they are applied to their own engine (docs/devstack.md).
+		if strings.Contains(version, "clickhouse") {
+			fmt.Printf("  = %s (engine-specific, skipped by the PG runner)\n", version)
+			continue
+		}
 		var done bool
 		if err := conn.QueryRow(ctx,
 			`SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version=$1)`, version).Scan(&done); err != nil {
@@ -567,6 +574,12 @@ apply_migrations_psql() {
                 [ -e "${f}" ] || die "no migration files found in ${MIGRATIONS_DIR}"
                 version="$(basename "${f}")"
                 [[ "${version}" =~ ^[A-Za-z0-9._-]+$ ]] || die "suspicious migration filename, refusing: ${version}"
+                # Engine-specific migrations (e.g. *clickhouse*, issue #35) are not
+                # PostgreSQL DDL; they are applied to their own engine (docs/devstack.md).
+                if [[ "${version}" == *clickhouse* ]]; then
+                        log "  = ${version} (engine-specific, skipped by the PG runner)"
+                        continue
+                fi
                 if "${psql_env[@]}" -tAqc "SELECT 1 FROM schema_migrations WHERE version='${version}'" | grep -q 1; then
                         log "  = ${version} (already applied)"
                         continue
