@@ -251,6 +251,35 @@ func New(cfg Config) (*Adapter, error) {
 // Compile-time proof the adapter satisfies the port.
 var _ messaging.MessagingProvider = (*Adapter)(nil)
 
+// String renders the configuration with zero credential material. It is the
+// deliberate counterpart to Adapter.String: fmt invokes the Stringer for
+// %v/%s on the config VALUE, so every top-level rendering of Config — fmt
+// verbs, log/slog payloads, panic dumps — is this redacted form. Unset
+// fields are omitted; secrets render only in their sanctioned masked forms
+// (**** or ****last4). The redaction test pins cfg.String() directly.
+func (c Config) String() string {
+	fields := make([]string, 0, 6)
+	for _, kv := range []struct{ key, val string }{
+		{"account_sid", c.AccountSID.Redacted()},
+		{"auth_token", c.AuthToken.Redacted()},
+		{"from_number", c.FromNumber.Redacted()},
+	} {
+		if kv.val != "" {
+			fields = append(fields, kv.key+"="+kv.val)
+		}
+	}
+	if c.APIBaseURL != "" {
+		fields = append(fields, "api_base_url="+c.APIBaseURL)
+	}
+	if c.StatusCallbackBase != "" {
+		fields = append(fields, "status_callback_base="+c.StatusCallbackBase)
+	}
+	if c.MaxRetries != 0 {
+		fields = append(fields, "max_retries="+strconv.Itoa(c.MaxRetries))
+	}
+	return "twilio.Config(" + strings.Join(fields, " ") + ")"
+}
+
 // String renders the adapter with zero credential material. This exists for
 // a subtle reason the redaction tests proved: fmt refuses to invoke
 // Stringer/GoStringer on values reached through UNEXPORTED fields, so

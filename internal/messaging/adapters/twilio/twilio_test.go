@@ -374,6 +374,9 @@ func TestSendTerminalErrorsNoRetry(t *testing.T) {
 		{http.StatusUnauthorized, apperrors.KindUnauth, "twilio.auth_failed"},
 		{http.StatusForbidden, apperrors.KindForbidden, "twilio.forbidden"},
 		{http.StatusNotFound, apperrors.KindNotFound, "twilio.not_found"},
+		{http.StatusGone, apperrors.KindNotFound, "twilio.not_found"},
+		{http.StatusUnprocessableEntity, apperrors.KindInvalid, "twilio.request_rejected"},
+		{http.StatusConflict, apperrors.KindInvalid, "twilio.request_rejected"},
 	}
 	postsBefore := 0
 	for _, tc := range cases {
@@ -508,12 +511,14 @@ func TestCredentialRedactionOnEveryRenderingPath(t *testing.T) {
 	}
 
 	renderings := map[string]string{
-		"%v":         fmt.Sprintf("%v", cfg),
-		"%+v":        fmt.Sprintf("%+v", cfg),
-		"%#v":        fmt.Sprintf("%#v", cfg),
-		"slog":       slogRender(t, cfg),
-		"adapter%#v": fmt.Sprintf("%#v", a),
-		"adapter%+v": fmt.Sprintf("%+v", a),
+		"%v":           fmt.Sprintf("%v", cfg),
+		"%+v":          fmt.Sprintf("%+v", cfg),
+		"%#v":          fmt.Sprintf("%#v", cfg),
+		"slog":         slogRender(t, cfg),
+		"adapter%#v":   fmt.Sprintf("%#v", a),
+		"adapter%+v":   fmt.Sprintf("%+v", a),
+		"cfg.String()": cfg.String(),
+		"slog cfg":     slogConfigRender(t, cfg),
 	}
 	jsonBytes, err := json.Marshal(cfg)
 	if err != nil {
@@ -536,5 +541,16 @@ func slogRender(t *testing.T, cfg Config) string {
 	buf := &strings.Builder{}
 	logger := slog.New(slog.NewTextHandler(buf, nil))
 	logger.Info("config", "sid", cfg.AccountSID, "token", cfg.AuthToken, "from", cfg.FromNumber)
+	return buf.String()
+}
+
+// slogConfigRender exercises the whole-config structured logging path: with
+// Config implementing LogValuer-eligible Stringer semantics, a cfg passed as
+// a single log attribute must render redacted, never a raw field dump.
+func slogConfigRender(t *testing.T, cfg Config) string {
+	t.Helper()
+	buf := &strings.Builder{}
+	logger := slog.New(slog.NewTextHandler(buf, nil))
+	logger.Info("twilio config", "config", cfg)
 	return buf.String()
 }
