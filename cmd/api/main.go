@@ -26,6 +26,7 @@ import (
 	"github.com/Roy-Wanyoike/orvexa/internal/platform/outbox"
 	"github.com/Roy-Wanyoike/orvexa/internal/queues"
 	"github.com/Roy-Wanyoike/orvexa/internal/tenancy"
+	"github.com/Roy-Wanyoike/orvexa/internal/webhooks"
 	"github.com/Roy-Wanyoike/orvexa/pkg/config"
 	"github.com/Roy-Wanyoike/orvexa/pkg/logging"
 )
@@ -58,6 +59,7 @@ func main() {
 	deps := httpserver.DomainDeps{Tenancy: tenancy.NewService(pool)}
 	if pool != nil {
 		writer := outbox.NewWriter(pool)
+		deps.Webhooks = webhooks.NewGateway(pool, cfg.WebhookHMACSecret)
 		deps.Customers = customers.NewService(pool)
 		deps.Conversations = conversations.NewService(pool, writer, "orvexa-api")
 		deps.Interactions = interactions.NewService(pool, writer, "orvexa-api")
