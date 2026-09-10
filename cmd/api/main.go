@@ -16,6 +16,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Roy-Wanyoike/orvexa/internal/agents"
+	"github.com/Roy-Wanyoike/orvexa/internal/ai"
+	"github.com/Roy-Wanyoike/orvexa/internal/analytics"
 	"github.com/Roy-Wanyoike/orvexa/internal/cases"
 	"github.com/Roy-Wanyoike/orvexa/internal/comms"
 	"github.com/Roy-Wanyoike/orvexa/internal/conversations"
@@ -32,6 +34,7 @@ import (
 	"github.com/Roy-Wanyoike/orvexa/internal/tenancy"
 	"github.com/Roy-Wanyoike/orvexa/internal/tools"
 	"github.com/Roy-Wanyoike/orvexa/internal/webhooks"
+	"github.com/Roy-Wanyoike/orvexa/internal/workflows"
 	"github.com/Roy-Wanyoike/orvexa/pkg/config"
 	apperrors "github.com/Roy-Wanyoike/orvexa/pkg/errors"
 	"github.com/Roy-Wanyoike/orvexa/pkg/logging"
@@ -89,6 +92,32 @@ func main() {
 		deps.Calls = telephony.NewService(interactionSvc, sim)
 		deps.Messages = messaging.NewService(interactionSvc, sim)
 		deps.Routing = routing.NewService(pool, routing.NewPresenceStore(pool, 2*time.Second), writer, "orvexa-api")
+
+		// intelligence plane: rules provider (deterministic) + tool gateway
+		// over platform services - AI never touches storage or providers directly
+		customerSvc := customers.NewService(pool)
+		caseSvc := deps.Cases
+		msgSvc := deps.Messages
+		executor := &platformToolExecutor{customers: customerSvc, cases: caseSvc, messages: msgSvc}
+		usageWriter := writer
+		aiGateway := ai.NewGateway(ai.NewRulesProvider("orvexa-api"), cfg.AIMaxTokens, cfg.AITimeout,
+			ai.WithUsageSink(func(ctx context.Context, r *ai.Result, inv *ai.Invocation) {
+				if env := ai.EmitUsageEvent("orvexa-api", r, inv); env != nil {
+					_ = usageWriter.PublishLater(ctx, env)
+				}
+			}))
+		policySource := &dbToolPolicy{pool: pool}
+		toolGateway := tools.NewGateway(executor, policySource,
+			func(ctx context.Context, c *tools.Call, o *tools.Outcome, err error) {
+				if env := tools.AuditEnvelope("orvexa-api", c, o, err); env != nil {
+					_ = usageWriter.PublishLater(ctx, env)
+				}
+			})
+		deps.AI = ai.NewRuntime(pool, aiGateway, toolGateway, writer, "orvexa-api")
+
+		// execution plane: durable workflows + analytics read model
+		deps.Workflows = workflows.NewEngine(pool, writer, &apiWorkflowServices{messages: msgSvc, pool: pool}, "orvexa-api")
+		deps.Analytics = analytics.NewService(pool)
 		deps.Writer = writer
 	}
 
@@ -197,4 +226,21 @@ func (d *dbToolPolicy) Allowlist(ctx context.Context, tenantID, agentID string) 
 		out[name] = n
 	}
 	return out, nil
+}
+
+// apiWorkflowServices adapts messaging for workflow steps.
+type apiWorkflowServices struct {
+	messages *messaging.Service
+	pool     *pgxpool.Pool
+}
+
+func (w *apiWorkflowServices) QueueMessage(ctx context.Context, tenantID, customerID, typ, to, body string) error {
+	if w.messages != nil && customerID != "" {
+		_, err := w.messages.Send(ctx, tenantID, messaging.SendInput{
+			CustomerID: customerID, Channel: typ, To: to, Body: body,
+		})
+		return err
+	}
+	_ = w.pool
+	return nil
 }
