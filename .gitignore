@@ -1,0 +1,24 @@
+# binaries
+/bin/
+/orvexa
+orvexa-api
+orvexa-worker
+orvexa-realtime
+
+# go
+*.test
+*.out
+coverage.txt
+
+# env & secrets
+.env
+.env.*
+!.env.example
+
+# local artifacts
+*.log
+/db/
+/tmp/
+.idea/
+.vscode/
+.DS_Store
