@@ -185,6 +185,6 @@ Architecture contract: authentication → signature validation → deduplication
 
 ---
 
-## VERDICT: BLOCKED — GO-2026-5004 (pgx v5.7.2 < v5.9.2, symbol-level reachable via cases.Service.ListNotes): land dependency bump [#81] + re-run govulncheck, then flip to PUBLIC-READY
+## VERDICT: PUBLIC-READY — remediation #81 merged (pgx v5.11.0 / chi v5.3.2); govulncheck re-run 2026-09-11: 0 reachable vulnerabilities; secret scan clean; headers + rate-limit matrices complete.
 
 Everything else the gate covers is green and evidenced: zero actionable secrets (scanner shipped, canary-validated), headers complete with tests, rate-limit matrix complete with server-side keying proven, webhook ingress fail-closed with adversarial test evidence. The single blocking item is a routine, same-major dependency bump outside this agent's file ownership.

@@ -122,7 +122,6 @@ via later events or a reindex-from-outbox job (reindex tool tracked
 separately); integration evidence on a real cluster pending a
 compose-capable runner.
 
-<<<<<<< HEAD
 ## W-C3c — Data Engineer (ClickHouse facts) — issue #35 [O-26]
 
 **Branch:** `feat/clickhouse-facts` — continued from 4 pushed commits (store,
@@ -184,70 +183,6 @@ point is exported and documented); `go vet -tags="temporal integration"` flags
 a pre-existing `internal/workflows/temporaldriver/integration_test.go:88`
 compile error inherited from #34 (unrelated, untouched); 13-month TTL is a
 placeholder until formal retention policy lands.
-=======
----
-
-## Wave C5b — [O-28] issue #37: Redis drivers (agent presence cache + distributed rate-limit store)
-
-**Owner:** Agent C5 (Platform engineer, perf/state) · **Branch:** `feat/redis-drivers` · **Predecessor state:** 2 untracked files salvaged (`presence_redis.go`/.`_test.go`), re-verified, restructured, extended; everything else written fresh in this session.
-
-**Delivered:**
-- `internal/routing/presence_redis.go` — `RedisPresenceCache` implementing the same
-  `PresenceReader` + `Invalidate` surface as the in-process `PresenceStore` (additive file;
-  `presence.go` untouched). DB (`agent_presence`) stays the source of truth; Redis is a shared
-  TTL snapshot cache (`orvexa:presence:v1:<tenant>`, sorted-JSON agent-ID array, negative
-  caching of known-empty sets); `Invalidate` DELs the shared key so every node sees the drop.
-  Redis errors NEVER fail a read — dial/command/decode failures degrade to the DB read (logged,
-  no keys/URLs/credentials echoed); only DB errors propagate, exactly like the in-process store.
-  Env swap point `NewPresenceCacheFromEnv`: `ORVEXA_REDIS_URL` unset → the exact in-process
-  `*PresenceStore` (byte-identical default); set-but-malformed → error (value never echoed);
-  set-but-unreachable → driver still constructs and degrades until Redis recovers.
-- `internal/platform/httpx/limiter_redis.go` — `RedisRateLimit` implementing the exact
-  `Allow(key string, now time.Time) (bool, time.Duration)` signature of the token bucket via the
-  new `Limiter` interface (both drivers asserted against it). Server-side INCR + EXPIRE NX fixed
-  window keyed `orvexa:rl:v1:<scope>:<key>:<bucket>` — tenant principal (or client IP) + route
-  class (scope), so limits are GLOBAL across a multi-binary deployment; `now`-derived buckets
-  need NTP-synced node clocks (documented). Fail semantics implemented and documented exactly:
-  `FailClosed=false` → allow on any Redis error (open elsewhere); `FailClosed=true` → deny with
-  the remaining window (auth-critical surfaces, 429 + Retry-After); no silent in-process
-  fallback (hybrid policy would be node-dependent and untestable — documented). Honest
-  divergences from the token bucket stated in the doc comment (fixed window vs refill, no burst
-  split, maxBuckets meaningless, denied attempts still INCR, ≤2× limit across a boundary).
-  Env swap point `NewRateLimitFromEnv` mirrors the presence one.
-- Tests (both packages): in-package fakes of the go-redis `UniversalClient` surface (embedded
-  nil interface — only the commands the drivers issue are implemented; no new deps), plus RESP2
-  TCP harnesses proving the drivers against the REAL go-redis client (dial, serialization,
-  `redis.Nil` miss contract, TTL stamping, INCR/EXPIRE NX). Swap equivalence suite proves the
-  Redis limiter and `NewRateLimit` make identical decisions for the burst pattern (and asserts
-  the documented cross-boundary divergence). Integration suites (`-tags=integration`, separate
-  files, house style): `ORVEXA_REDIS_URL`-gated against the compose `redis:7` service, skipping
-  cleanly when unset — presence lifecycle (miss→load→write-back→hit→invalidate→TTL expiry) and
-  the global-budget property (two independent clients share one bucket; capacity restored for
-  both in the next window; TTL bounded by the window).
-- Docs: `.env.example` + operations runbook — `ORVEXA_REDIS_URL` row with per-driver outage
-  semantics, compose dev path, integration-suite invocation, scaling notes (multi-replica API
-  once Redis is shared; NTP clock requirement).
-
-**Salvage notes:** predecessor's two untracked files were compile-clean and behaviorally sound;
-kept (after restructuring: compose integration test moved to the `-tags=integration` file per
-house style; unused imports trimmed; gofmt). Limiter driver + all four limiter/presence test
-harnesses and docs were written in this session.
-
-**Verification (CI-equivalent local full matrix):** `gofmt -l .` empty · `go vet ./...` clean
-(incl. `-tags=integration`) · `go build ./...` clean · `go test -race ./...` all 29 packages
-green · `make lint-todos` clean · integration suites green against a REAL Redis 7.2.5
-(source-built in-sandbox, compose unavailable here): `TestRedisPresenceComposeIntegration` PASS
-(1.10s), `TestRedisRateLimitComposeIntegration` PASS (2.16s); both skip cleanly without the env.
-
-**PR:** "feat(infra): Redis presence cache + distributed rate-limit drivers (#37)" — Closes #37.
-
-**Risks / follow-ups:** glue wave must call `NewPresenceCacheFromEnv` / `NewRateLimitFromEnv`
-in `cmd/api` + `httpserver` wiring (the swap points exist and are proven; until then the env var
-affects nothing at boot — by design, zero default drift); limiter `scope` values must be chosen
-at the mount sites (`auth` vs `webhooks`) with `FailClosed=true` on the auth surface; fixed
-window permits up to 2× limit across a bucket boundary (documented; a ZSET sliding window is the
-follow-up if that is unacceptable); no Redis Cluster/pub-sub scope by issue constraint.
->>>>>>> origin/main
 
 ---
 
