@@ -26,10 +26,13 @@
 //	Hold      -> api uuid_hold on <uuid>
 //	Resume    -> api uuid_hold off <uuid>
 //
-// and translates CHANNEL_PROGRESS / CHANNEL_ANSWER / CHANNEL_HANGUP /
-// BACKGROUND_JOB frames into comms.ProviderEvent deliveries (the same
-// signed-webhook path the built-in simulator uses), correlating legs by the
-// origination UUID, which equals the platform interaction id.
+// and translates CHANNEL_ANSWER / CHANNEL_HANGUP / BACKGROUND_JOB frames
+// into comms.ProviderEvent deliveries (the same signed-webhook path the
+// built-in simulator uses), correlating legs by the origination UUID, which
+// equals the platform interaction id. Ringing progress is observed through
+// BACKGROUND_JOB correlation only: uncorrelatable channel chatter about legs
+// this process never placed is deliberately never translated (see README,
+// "Eventing assumptions").
 //
 // Credentials are accepted as registry.Secret values and are never rendered
 // raw by any logging/error path of this package. The package carries no
