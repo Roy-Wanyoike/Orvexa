@@ -4,71 +4,96 @@
 package main
 
 import (
-        "context"
-        "errors"
-        "fmt"
-        "net/http"
-        "os"
-        "os/signal"
-        "syscall"
-        "time"
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
-        "github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/pgxpool"
 
-        "github.com/Roy-Wanyoike/orvexa/internal/httpserver"
-        "github.com/Roy-Wanyoike/orvexa/internal/platform/db"
-        "github.com/Roy-Wanyoike/orvexa/pkg/config"
-        "github.com/Roy-Wanyoike/orvexa/pkg/logging"
+	"github.com/Roy-Wanyoike/orvexa/internal/agents"
+	"github.com/Roy-Wanyoike/orvexa/internal/cases"
+	"github.com/Roy-Wanyoike/orvexa/internal/conversations"
+	"github.com/Roy-Wanyoike/orvexa/internal/customers"
+	"github.com/Roy-Wanyoike/orvexa/internal/httpserver"
+	"github.com/Roy-Wanyoike/orvexa/internal/interactions"
+	"github.com/Roy-Wanyoike/orvexa/internal/platform/db"
+	"github.com/Roy-Wanyoike/orvexa/internal/platform/httpx"
+	"github.com/Roy-Wanyoike/orvexa/internal/platform/outbox"
+	"github.com/Roy-Wanyoike/orvexa/internal/queues"
+	"github.com/Roy-Wanyoike/orvexa/internal/tenancy"
+	"github.com/Roy-Wanyoike/orvexa/pkg/config"
+	"github.com/Roy-Wanyoike/orvexa/pkg/logging"
 )
 
 func main() {
-        cfg, err := config.Load()
-        if err != nil {
-                fmt.Fprintln(os.Stderr, "config load failed:", err)
-                os.Exit(1)
-        }
-        log := logging.New(cfg.LogLevel, "orvexa-api", cfg.Env)
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "config load failed:", err)
+		os.Exit(1)
+	}
+	log := logging.New(cfg.LogLevel, "orvexa-api", cfg.Env)
+	slog := httpx.Logger(func(msg string, args ...any) { log.Info(msg, args...) })
 
-        ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-        defer stop()
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
-        var pool *pgxpool.Pool
-        if cfg.DatabaseURL != "" {
-                p, err := db.Connect(ctx, cfg.DatabaseURL, cfg.DBMaxConns)
-                if err != nil {
-                        log.Error("database connect failed (continuing degraded)", "err", err)
-                } else {
-                        pool = p
-                        defer p.Close()
-                }
-        } else {
-                log.Warn("no ORVEXA_DATABASE_URL configured — running without durable storage")
-        }
+	var pool *pgxpool.Pool
+	if cfg.DatabaseURL != "" {
+		p, err := db.Connect(ctx, cfg.DatabaseURL, cfg.DBMaxConns)
+		if err != nil {
+			log.Error("database connect failed (continuing degraded)", "err", err)
+		} else {
+			pool = p
+			defer p.Close()
+		}
+	} else {
+		log.Warn("no ORVEXA_DATABASE_URL configured — running without durable storage")
+	}
 
-        srv := &http.Server{
-                Addr: cfg.HTTPAddr,
-                Handler: httpserver.New(httpserver.Deps{
-                        Pool: pool,
-                }),
-                ReadHeaderTimeout: 10 * time.Second,
-        }
+	deps := httpserver.DomainDeps{Tenancy: tenancy.NewService(pool)}
+	if pool != nil {
+		writer := outbox.NewWriter(pool)
+		deps.Customers = customers.NewService(pool)
+		deps.Conversations = conversations.NewService(pool, writer, "orvexa-api")
+		deps.Interactions = interactions.NewService(pool, writer, "orvexa-api")
+		deps.Agents = agents.NewService(pool)
+		deps.Queues = queues.NewService(pool)
+		deps.Cases = cases.NewService(pool, writer, "orvexa-api")
+		deps.Writer = writer
+	}
 
-        errCh := make(chan error, 1)
-        go func() { errCh <- srv.ListenAndServe() }()
-        log.Info("orvexa-api listening", "addr", cfg.HTTPAddr)
+	srv := &http.Server{
+		Addr: cfg.HTTPAddr,
+		Handler: httpserver.New(httpserver.Deps{
+			Pool:    pool,
+			Domain:  deps,
+			Limiter: httpx.NewRateLimit(600, 120, 10_000), // per-key: 600/min, burst 120
+			Logger:  slog,
+		}),
+		ReadHeaderTimeout: 10 * time.Second,
+	}
 
-        select {
-        case <-ctx.Done():
-                log.Info("shutdown signal received")
-        case err := <-errCh:
-                if err != nil && !errors.Is(err, http.ErrServerClosed) {
-                        log.Error("server failed", "err", err)
-                        os.Exit(1)
-                }
-        }
+	errCh := make(chan error, 1)
+	go func() { errCh <- srv.ListenAndServe() }()
+	log.Info("orvexa-api listening", "addr", cfg.HTTPAddr)
 
-        shutCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-        defer cancel()
-        _ = srv.Shutdown(shutCtx)
-        log.Info("orvexa-api stopped")
+	select {
+	case <-ctx.Done():
+		log.Info("shutdown signal received")
+	case err := <-errCh:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Error("server failed", "err", err)
+			os.Exit(1)
+		}
+	}
+
+	shutCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	_ = srv.Shutdown(shutCtx)
+	log.Info("orvexa-api stopped")
 }
