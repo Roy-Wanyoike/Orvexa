@@ -12,10 +12,10 @@ import (
 // scheme prefix is tolerated and stripped. The same variable gates the
 // integration test (tests skip cleanly when it is unset).
 const (
-	EnvURL       = "ORVEXA_TEMPORAL_URL"          // host:port of the Temporal frontend (gRPC)
-	EnvNamespace = "ORVEXA_TEMPORAL_NAMESPACE"    // Temporal namespace (default: "default")
-	EnvTaskQueue = "ORVEXA_TEMPORAL_TASK_QUEUE"   // workflow+activity task queue
-	EnvSource    = "ORVEXA_WORKFLOWS_SOURCE"      // outbox event source for audit parity
+	EnvURL       = "ORVEXA_TEMPORAL_URL"        // host:port of the Temporal frontend (gRPC)
+	EnvNamespace = "ORVEXA_TEMPORAL_NAMESPACE"  // Temporal namespace (default: "default")
+	EnvTaskQueue = "ORVEXA_TEMPORAL_TASK_QUEUE" // workflow+activity task queue
+	EnvSource    = "ORVEXA_WORKFLOWS_SOURCE"    // outbox event source for audit parity
 )
 
 // Defaults keep zero-config dev stacks predictable; every field is overridable
