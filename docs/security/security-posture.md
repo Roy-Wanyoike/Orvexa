@@ -24,7 +24,7 @@
 | C9 | High-entropy strings (≥40 chars, Shannon ≥ 4.5 bits/char) | 8 | 8 | 0 |
 | C10 | Tracked `.env` files (except `.env.example`) | 0 | 0 | 0 |
 | C11 | Secret-named artifacts (`*.pem`, `*.key`, `id_rsa*`, `credentials*.json`, …) | 0 | 0 | 0 |
-| C12 | Generic credential assigns (`password/secret/token/api_key = "8+ char literal"`) | 4 | 4 | 0 |
+| C12 | Generic credential assigns (a credential word among password, secret, token, api_key — assigned an 8+ char quoted literal) | 4 | 4 | 0 |
 
 **Result: CLEAN (exit 0) — zero actionable secret findings.** Full table output is attached to the PR.
 
