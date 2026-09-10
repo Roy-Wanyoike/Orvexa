@@ -129,6 +129,10 @@ func (s *Service) WithRoleResolver(r RoleResolver) *Service {
 	return s
 }
 
+// HasRoleResolver reports whether an explicit authorization resolver is
+// wired (production wiring respects a deliberately injected resolver).
+func (s *Service) HasRoleResolver() bool { return s.resolver != nil }
+
 // Issuer reports the configured IdP issuer (safe to log; not a secret).
 func (s *Service) Issuer() string { return s.cfg.Issuer }
 
