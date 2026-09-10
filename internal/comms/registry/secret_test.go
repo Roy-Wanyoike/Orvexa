@@ -13,13 +13,14 @@ func TestRedacted(t *testing.T) {
 		in   string
 		want string
 	}{
-		{"", ""},                    // unset fields are omitted by renderers
-		{"ab", "****"},              // short values fully masked
-		{"0123456789", "****"},      // 10 bytes
-		{"01234567890", "****"},     // 11 bytes: still below threshold
-		{"012345678901", "****901"}, // 12 bytes: threshold, last four reveal
+		{"", ""},                     // unset fields are omitted by renderers
+		{"ab", "****"},               // short values fully masked
+		{"0123456789", "****"},       // 10 bytes
+		{"01234567890", "****"},      // 11 bytes: still below threshold
+		{"012345678901", "****8901"}, // 12 bytes: threshold, final four bytes reveal
 		{strings.Repeat("a", 32), "****aaaa"},
-		{strings.Repeat("α", 11), "****"}, // 22 bytes, but last four bytes split a rune
+		{strings.Repeat("α", 11), "****αα"}, // 22 bytes, but the final four bytes are two whole runes: exactly 4 bytes still surface
+		{strings.Repeat("aα€", 2), "****"},  // 12 bytes whose final four would start mid-rune: fully masked
 	}
 	for _, tc := range cases {
 		if got := Redacted(tc.in); got != tc.want {

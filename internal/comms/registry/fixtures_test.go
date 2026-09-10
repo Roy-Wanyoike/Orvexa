@@ -7,9 +7,9 @@ import (
 )
 
 // Clearly-fake credential fixtures. Zero real secret material lives in this
-// repository: values are leet-substituted ("t0ken", "s3cret") so a redaction
-// assertion cannot pass by coincidence with rendered vocabulary such as
-// key names ("auth_token", "app_secret") or provider names.
+// repository: values are leet-substituted ("t0ken", "s3cret", "v01ce") so a
+// redaction assertion cannot pass by coincidence with rendered vocabulary
+// such as key names ("auth_token", "app_secret", "voice_product_code").
 var fakeProviderEnv = map[string]string{
 	"ORVEXA_TWILIO_ACCOUNT_SID":       "ACfakesid0000000000000aa1",
 	"ORVEXA_TWILIO_AUTH_TOKEN":        "faket0ken0000000000abcd",
@@ -20,7 +20,7 @@ var fakeProviderEnv = map[string]string{
 	"ORVEXA_WHATSAPP_VERIFY_TOKEN":    "waf4kever1fy00000hh88",
 	"ORVEXA_AT_USERNAME":              "atf4keuser0000aa11",
 	"ORVEXA_AT_API_KEY":               "atf4kekey00000bb22",
-	"ORVEXA_AT_VOICE_PRODUCT_CODE":    "atf4kevoice00000cc33",
+	"ORVEXA_AT_VOICE_PRODUCT_CODE":    "atf4kev01ce00000cc33",
 	"ORVEXA_AT_SENDER_ID":             "atf4kes3nder000dd44",
 	"ORVEXA_FREESWITCH_HOST":          "freeswitch.internal",
 	"ORVEXA_FREESWITCH_PORT":          "18021",

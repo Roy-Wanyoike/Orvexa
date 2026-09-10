@@ -65,7 +65,7 @@ func telephonySecretValues(t *testing.T, c *TelephonyConfig) []string {
 	var vals []string
 	for _, fs := range spec.Telephony {
 		if fs.Secret {
-			vals = append(vals, string(*targets[fs.Env]))
+			vals = append(vals, targets[fs.Env].get())
 		}
 	}
 	return vals
@@ -81,7 +81,7 @@ func messagingSecretValues(t *testing.T, c *MessagingConfig) []string {
 	var vals []string
 	for _, fs := range spec.Messaging {
 		if fs.Secret {
-			vals = append(vals, string(*targets[fs.Env]))
+			vals = append(vals, targets[fs.Env].get())
 		}
 	}
 	return vals
@@ -102,7 +102,7 @@ func TestTelephonyRenderingLeaksNoCredentials(t *testing.T) {
 			}
 			secrets := telephonySecretValues(t, c)
 			renderings := telephonyRenderings(t, c)
-			for name, rendering := range renderings {
+			for _, rendering := range renderings {
 				assertNoCredentialLeak(t, rendering, secrets)
 			}
 
@@ -145,7 +145,7 @@ func TestMessagingRenderingLeaksNoCredentials(t *testing.T) {
 			}
 			secrets := messagingSecretValues(t, c)
 			renderings := messagingRenderings(t, c)
-			for name, rendering := range renderings {
+			for _, rendering := range renderings {
 				assertNoCredentialLeak(t, rendering, secrets)
 			}
 			if p == ProviderAfricasTalking {
@@ -182,7 +182,7 @@ func TestRenderedJSONStructure(t *testing.T) {
 	if _, ok := m["twilio.auth_token"]; !ok {
 		t.Errorf("rendered JSON must carry the masked auth_token key")
 	}
-	assertNoCredentialLeak(t, mustJSON(t, c), telephonySecretValues(t, c))
+	assertNoCredentialLeak(t, string(mustJSON(t, c)), telephonySecretValues(t, c))
 }
 
 // TestErrorStringsCarryNoCredentialMaterial: validation failures embed env
