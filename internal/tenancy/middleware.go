@@ -60,3 +60,58 @@ func retryCeil(d time.Duration) string {
 func tenancyCtx(ctx context.Context, p *Principal) context.Context {
 	return WithPrincipal(ctx, p)
 }
+
+// ---- capability RBAC surface (additive, [O-29] issue #38) ----
+//
+// These additions extend the principal model without altering any existing
+// behavior: the API-key authentication path above is unchanged, and the new
+// capability helpers are consumed by the OIDC identity plane
+// (internal/identity) which composes this middleware additively.
+
+// HasCapability reports whether the principal was granted the capability.
+// For API-key principals capabilities arrive as minted key scopes; for OIDC
+// principals they are the union of role-binding capability sets.
+func (p *Principal) HasCapability(capability string) bool {
+	return p.HasScope(capability)
+}
+
+// Capabilities returns a defensive copy of the principal's granted
+// capability set (empty when none). Callers must not mutate principal state.
+func (p *Principal) Capabilities() []string {
+	if len(p.Scopes) == 0 {
+		return nil
+	}
+	out := make([]string, len(p.Scopes))
+	copy(out, p.Scopes)
+	return out
+}
+
+// IdentityRef records HOW the caller authenticated — auth method plus the
+// underlying identity string (IdP subject for OIDC, key row id for API keys).
+// It complements Principal (which carries tenant + granted scopes) and lets
+// downstream middleware distinguish the enforcement model in effect.
+type IdentityRef struct {
+	Method   string // "oidc" | "api-key"
+	Subject  string // OIDC `sub` claim or API-key row id
+	TenantID string // tenant asserted by the credential
+}
+
+// AuthMethodOIDC marks credentials verified by the identity plane.
+const AuthMethodOIDC = "oidc"
+
+// AuthMethodAPIKey marks credentials verified by the API-key path.
+const AuthMethodAPIKey = "api-key"
+
+const ctxIdentityRef ctxKey = 201
+
+// WithIdentityRef attaches the authentication provenance to the context.
+func WithIdentityRef(ctx context.Context, ref IdentityRef) context.Context {
+	return context.WithValue(ctx, ctxIdentityRef, ref)
+}
+
+// IdentityRefFrom extracts the authentication provenance (ok=false when the
+// request carries no resolved identity — e.g. before authentication).
+func IdentityRefFrom(ctx context.Context) (IdentityRef, bool) {
+	ref, ok := ctx.Value(ctxIdentityRef).(IdentityRef)
+	return ref, ok
+}
