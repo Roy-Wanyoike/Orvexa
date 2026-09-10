@@ -48,15 +48,22 @@ func SecurityHeaders(next http.Handler) http.Handler {
 
 // Recover converts panics into 500 responses instead of dropped connections.
 func Recover(log Logger, next http.Handler) http.Handler {
-        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-                defer func() {
-                        if rec := recover(); rec != nil {
-                                log("panic recovered", "request_id", RequestIDFrom(r.Context()), "panic", rec)
-                                WriteError(w, apperrors.Internal("internal.error", "unexpected internal error"))
-                        }
-                }()
-                next.ServeHTTP(w, r)
-        })
+        return Recoverer(log)(next)
+}
+
+// Recoverer is the middleware form of Recover (for chi's Use).
+func Recoverer(log Logger) func(http.Handler) http.Handler {
+        return func(next http.Handler) http.Handler {
+                return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+                        defer func() {
+                                if rec := recover(); rec != nil {
+                                        log("panic recovered", "request_id", RequestIDFrom(r.Context()), "panic", rec)
+                                        WriteError(w, apperrors.Internal("internal.error", "unexpected internal error"))
+                                }
+                        }()
+                        next.ServeHTTP(w, r)
+                })
+        }
 }
 
 // Logger is the minimal logging surface httpx depends on (keeps pkg cycle-free).
