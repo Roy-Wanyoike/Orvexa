@@ -1,0 +1,221 @@
+openapi: 3.1.0
+info:
+  title: Orvexa API
+  version: v1
+  description: |
+    Orvexa — the AI-native Contact Center OS. All resources are tenant-scoped:
+    the tenant derives from the authenticated API key, never from request bodies.
+    Responses use the envelope {data, meta} or {error:{code,message,details?}}.
+  contact: { name: Orvexa Engineering }
+  license: { name: MIT }
+servers:
+  - url: /api/v1
+security:
+  - ApiKeyAuth: []
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: 'Authorization: Bearer <key> also accepted.'
+  parameters:
+    cursor: { name: cursor, in: query, schema: { type: string }, description: Opaque pagination cursor. }
+    limit: { name: limit, in: query, schema: { type: integer, default: 25, maximum: 100 } }
+  responses:
+    Error422: { description: Validation failed (error.code=*.invalid|malformed) }
+    Error404: { description: Not found or foreign-tenant id (indistinguishable) }
+    Error409: { description: Illegal state transition / duplicate }
+paths:
+  /customers:
+    post:
+      summary: Create a customer with identifiers
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CustomerCreate' } } } }
+      responses: { '201': { description: Created }, '409': { $ref: '#/components/responses/Error409' }, '422': { $ref: '#/components/responses/Error422' } }
+    get:
+      summary: List customers (cursor pagination)
+      parameters: [{ $ref: '#/components/parameters/cursor' }, { $ref: '#/components/parameters/limit' }]
+      responses: { '200': { description: OK } }
+  /customers/{id}:
+    get:
+      summary: Get one customer
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses: { '200': { description: OK }, '404': { $ref: '#/components/responses/Error404' } }
+  /customers/resolve:
+    post:
+      summary: Resolve a channel identifier to a customer (phone/whatsapp/email/external_crm/handle)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [type, value], properties: { type: { type: string }, value: { type: string } } } } } }
+      responses: { '200': { description: OK }, '404': { $ref: '#/components/responses/Error404' } }
+  /conversations:
+    get:
+      summary: List conversations (status=open|closed)
+      parameters: [{ name: status, in: query, schema: { type: string, enum: [open, closed] } }, { $ref: '#/components/parameters/cursor' }, { $ref: '#/components/parameters/limit' }]
+      responses: { '200': { description: OK } }
+  /conversations/{id}:
+    get: { summary: Get one conversation, parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { '200': { description: OK }, '404': { $ref: '#/components/responses/Error404' } } }
+  /conversations/{id}/close:
+    post: { summary: Close a conversation (terminal), parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { '200': { description: OK }, '409': { $ref: '#/components/responses/Error409' } } }
+  /conversations/{id}/assign:
+    post:
+      summary: Assign agent/queue
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { agent_id: { type: string }, queue_id: { type: string } } } } } }
+      responses: { '200': { description: OK }, '409': { $ref: '#/components/responses/Error409' } }
+  /conversations/{id}/interactions:
+    get: { summary: Interaction timeline of a conversation, parameters: [{ name: id, in: path, required: true, schema: { type: string } }, { $ref: '#/components/parameters/cursor' }], responses: { '200': { description: OK } } }
+  /interactions:
+    post:
+      summary: Create an interaction (conversation auto-opened when omitted)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/InteractionCreate' } } } }
+      responses: { '201': { description: Created }, '409': { $ref: '#/components/responses/Error409' }, '422': { $ref: '#/components/responses/Error422' } }
+  /interactions/{id}:
+    get: { summary: Get one interaction, parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { '200': { description: OK }, '404': { $ref: '#/components/responses/Error404' } } }
+  /interactions/{id}/transition:
+    post:
+      summary: Guarded lifecycle transition (pending→active→wrapup→completed|failed|canceled)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [to], properties: { to: { type: string, enum: [pending, active, wrapup, completed, failed, canceled] }, end_reason: { type: string } } } } } }
+      responses: { '200': { description: OK }, '409': { $ref: '#/components/responses/Error409' } }
+  /interactions/{id}/assign:
+    post: { summary: Assign agent/queue to an interaction, parameters: [{ name: id, in: path, required: true, schema: { type: string } }], requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { agent_id: { type: string }, queue_id: { type: string } } } } } }, responses: { '200': { description: OK } } }
+  /agents:
+    post: { summary: Register an agent (identity + skills), requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AgentCreate' } } } }, responses: { '201': { description: Created }, '409': { $ref: '#/components/responses/Error409' } } }
+    get: { summary: List agents, parameters: [{ $ref: '#/components/parameters/cursor' }], responses: { '200': { description: OK } } }
+  /agents/{id}:
+    get: { summary: Get one agent, parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { '200': { description: OK }, '404': { $ref: '#/components/responses/Error404' } } }
+  /agents/{id}/presence:
+    get: { summary: Read agent presence, parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { '200': { description: OK } } }
+    put: { summary: Set presence (available|busy|wrapup|offline), parameters: [{ name: id, in: path, required: true, schema: { type: string } }], requestBody: { required: true, content: { application/json: { schema: { type: object, required: [status], properties: { status: { type: string, enum: [available, busy, wrapup, offline] } } } } } }, responses: { '200': { description: OK } } }
+  /queues:
+    post: { summary: Create a queue, requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/QueueCreate' } } } }, responses: { '201': { description: Created }, '409': { $ref: '#/components/responses/Error409' } } }
+    get: { summary: List queues, parameters: [{ $ref: '#/components/parameters/cursor' }], responses: { '200': { description: OK } } }
+  /queues/{id}:
+    get: { summary: Get one queue, parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { '200': { description: OK }, '404': { $ref: '#/components/responses/Error404' } } }
+  /cases:
+    post: { summary: Open a case (serialized per-tenant ref), requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CaseCreate' } } } }, responses: { '201': { description: Created } } }
+    get: { summary: List cases, parameters: [{ $ref: '#/components/parameters/cursor' }], responses: { '200': { description: OK } } }
+  /cases/{id}:
+    get: { summary: Get one case, parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { '200': { description: OK }, '404': { $ref: '#/components/responses/Error404' } } }
+  /cases/{id}/transition:
+    post: { summary: Guarded case transition (open→in_progress→…→closed; reopen from resolved), parameters: [{ name: id, in: path, required: true, schema: { type: string } }], requestBody: { required: true, content: { application/json: { schema: { type: object, required: [to], properties: { to: { type: string, enum: [open, in_progress, pending_customer, resolved, closed, canceled] }, reason: { type: string } } } } } }, responses: { '200': { description: OK }, '409': { $ref: '#/components/responses/Error409' } } }
+  /cases/{id}/notes:
+    post: { summary: Add a note, parameters: [{ name: id, in: path, required: true, schema: { type: string } }], requestBody: { required: true, content: { application/json: { schema: { type: object, required: [author_type, author_id, body], properties: { author_type: { type: string, enum: [agent, ai_agent, system] }, author_id: { type: string }, body: { type: string, maxLength: 8000 }, internal: { type: boolean, default: true } } } } } }, responses: { '201': { description: Created } } }
+    get: { summary: List notes, parameters: [{ name: id, in: path, required: true, schema: { type: string } }, { $ref: '#/components/parameters/cursor' }], responses: { '200': { description: OK } } }
+  /cases/{id}/interactions/{interactionId}/link:
+    post: { summary: Link an interaction to a case, parameters: [{ name: id, in: path, required: true, schema: { type: string } }, { name: interactionId, in: path, required: true, schema: { type: string } }], responses: { '204': { description: Linked }, '404': { $ref: '#/components/responses/Error404' } } }
+  /calls:
+    post:
+      summary: Place an outbound call (creates a voice interaction; provider lifecycle flows via signed webhooks)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [customer_id, to], properties: { customer_id: { type: string }, from: { type: string }, to: { type: string }, agent_id: { type: string }, queue_id: { type: string }, options: { type: object, additionalProperties: true } } } } } }
+      responses: { '201': { description: Created }, '422': { $ref: '#/components/responses/Error422' } }
+  /calls/{id}/actions:
+    post:
+      summary: Call action (answer|hangup|transfer|hold|resume|complete)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [action], properties: { action: { type: string, enum: [answer, hangup, transfer, hold, resume, complete] }, destination: { type: string } } } } } }
+      responses: { '200': { description: OK }, '409': { $ref: '#/components/responses/Error409' } }
+  /messages:
+    post:
+      summary: Send a message (whatsapp|sms|email) — creates the outbound interaction
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [customer_id, channel, to, body], properties: { customer_id: { type: string }, channel: { type: string, enum: [whatsapp, sms, email] }, from: { type: string }, to: { type: string }, body: { type: string, maxLength: 4096 }, media_urls: { type: array, items: { type: string } } } } } } }
+      responses: { '201': { description: Created } }
+  /routing/interactions/{id}:
+    post:
+      summary: Route an interaction (deterministic engine; decision recorded)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { required_skills: { type: array, items: { type: string } }, language: { type: string }, priority: { type: integer, minimum: 1, maximum: 10 }, queue_id: { type: string } } } } } }
+      responses: { '200': { description: Decision }, '404': { $ref: '#/components/responses/Error404' } }
+  /routing/decisions:
+    get: { summary: Decision records (immutable), parameters: [{ name: interaction_id, in: query, schema: { type: string } }, { $ref: '#/components/parameters/cursor' }], responses: { '200': { description: OK } } }
+  /ai/agents/{id}:
+    get: { summary: AI agent configuration (runtime view), parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { '200': { description: OK }, '404': { $ref: '#/components/responses/Error404' } } }
+  /ai/agents/{id}/invoke:
+    post:
+      summary: One governed AI turn (metered; suggestions are advisory)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { interaction_id: { type: string }, user_message: { type: string }, facts: { type: object, additionalProperties: true } } } } } }
+      responses: { '200': { description: Result }, '409': { $ref: '#/components/responses/Error409' } }
+  /ai/agents/{id}/tools:
+    post:
+      summary: Execute a tool through the gateway (allowlist + schema + rate + audit)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [tool, args], properties: { tool: { type: string, enum: [get_customer, create_case, send_whatsapp] }, interaction_id: { type: string }, args: { type: object, additionalProperties: true } } } } } }
+      responses: { '200': { description: Outcome }, '403': { description: Not allowed }, '429': { description: Rate limited } }
+  /workflows/callbacks:
+    post: { summary: Start a callback workflow, requestBody: { required: true, content: { application/json: { schema: { type: object, required: [customer_id, phone], properties: { customer_id: { type: string }, phone: { type: string }, schedule_at: { type: string, format: date-time }, notes: { type: string } } } } } }, responses: { '201': { description: Created }, '422': { $ref: '#/components/responses/Error422' } } }
+  /workflows/collections:
+    post: { summary: Start a collections ladder, requestBody: { required: true, content: { application/json: { schema: { type: object, required: [customer_id, invoice_ref, amount_due, phone], properties: { customer_id: { type: string }, invoice_ref: { type: string }, amount_due: { type: integer }, phone: { type: string } } } } } }, responses: { '201': { description: Created } } }
+  /workflows/{id}:
+    get: { summary: Workflow instance state, parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { '200': { description: OK }, '404': { $ref: '#/components/responses/Error404' } } }
+  /workflows/{id}/cancel:
+    post: { summary: Cancel a running workflow, parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { '200': { description: OK }, '409': { $ref: '#/components/responses/Error409' } } }
+  /analytics/summary:
+    get: { summary: Facts aggregation over a bounded window (max 30 days), parameters: [{ name: from, in: query, schema: { type: string, format: date-time } }, { name: to, in: query, schema: { type: string, format: date-time } }], responses: { '200': { description: OK }, '422': { $ref: '#/components/responses/Error422' } } }
+  /webhooks/{provider}:
+    post:
+      summary: Provider webhook ingress (PUBLIC — HMAC signature required)
+      security: []
+      parameters: [{ name: provider, in: path, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object } } } }
+      responses: { '200': { description: Duplicate (idempotent replay) }, '202': { description: Accepted }, '401': { description: Signature invalid } }
+components:
+  schemas:
+    CustomerCreate:
+      type: object
+      required: [identifiers]
+      properties:
+        display_name: { type: string }
+        company: { type: string }
+        language: { type: string, default: en }
+        timezone: { type: string, default: Africa/Nairobi }
+        identifiers:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [type, value]
+            properties:
+              type: { type: string, enum: [phone, whatsapp, email, external_crm, handle] }
+              value: { type: string }
+              is_primary: { type: boolean }
+        tags: { type: array, items: { type: string } }
+    InteractionCreate:
+      type: object
+      required: [customer_id, channel, direction, source, destination]
+      properties:
+        customer_id: { type: string }
+        conversation_id: { type: string }
+        channel: { type: string, enum: [voice, whatsapp, sms, email, chat, ussd] }
+        direction: { type: string, enum: [inbound, outbound] }
+        source: { type: string }
+        destination: { type: string }
+        provider: { type: string, default: internal }
+        provider_ref: { type: string }
+        idempotency_key: { type: string, pattern: '^[A-Za-z0-9._:-]{8,128}$' }
+    AgentCreate:
+      type: object
+      required: [external_identity, display_name]
+      properties:
+        external_identity: { type: string }
+        display_name: { type: string }
+        email: { type: string }
+        language: { type: string }
+        skills: { type: array, items: { type: object, required: [skill], properties: { skill: { type: string }, level: { type: integer, minimum: 1, maximum: 5 } } } }
+    QueueCreate:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        priority: { type: integer, minimum: 1, maximum: 10, default: 5 }
+        sla_seconds: { type: integer, minimum: 5, maximum: 3600, default: 60 }
+        skills: { type: array, items: { type: string } }
+        business_hours: { type: object, additionalProperties: true }
+    CaseCreate:
+      type: object
+      required: [customer_id, subject]
+      properties:
+        customer_id: { type: string }
+        subject: { type: string, maxLength: 512 }
+        description: { type: string }
+        priority: { type: string, enum: [low, normal, high, urgent], default: normal }

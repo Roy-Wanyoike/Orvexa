@@ -42,7 +42,11 @@ qa/             release gate reports
 
 ## Status
 
-Honest, current status lives in [qa/QA_REPORT.md](qa/QA_REPORT.md) and the [issue tracker](../../issues). Infrastructure adapters (NATS JetStream, Temporal, ClickHouse, OpenSearch, Redis, real carrier providers) are behind interfaces with local-safe default implementations so the full interaction loop runs end-to-end with zero external dependencies; production adapters are tracked issues, not silent gaps.
+**GO for pilot onboarding (sandbox/demo posture)** — see [qa/QA_REPORT.md](qa/QA_REPORT.md) for the evidence-backed verdict (build/vet/race-test matrix across 16 packages, boot verification, security posture) and the honest limitation ledger.
+
+Waves shipped (each via issue → PR → merge): foundation, domain core, event backbone, communications, routing + presence, realtime gateway, AI + tool gateway, durable workflows + analytics.
+
+Production adapters (real carriers, NATS, ClickHouse, OpenSearch, Redis, Temporal, OIDC/RBAC) are behind defined interfaces and tracked in the [roadmap issue](../../issues/10) — the full loop runs today with zero external dependencies.
 
 ## Quickstart
 
