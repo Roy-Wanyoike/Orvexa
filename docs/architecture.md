@@ -47,7 +47,7 @@ Nothing outside telephony → routing → agent may block an interaction. AI, an
 
 Domains commit state **and** their events in one SQL transaction (`outbox.Writer.Insert(ctx, tx, env)`). The worker dispatcher claims batches with `FOR UPDATE SKIP LOCKED`, publishes to the bus, acks. Delivery is **at-least-once**; consumers dedupe by `Envelope.ID`. Topics come from a closed registry in `pkg/events`. Details: [ADR-0004](adr/0004-event-delivery-and-outbox.md).
 
-The bus has two drivers behind one `platform/bus.Bus` interface: the in-process default and a NATS JetStream driver (`internal/platform/bus/nats.go` — synchronous bounded publishes, durable pull consumers per subscription, bounded NAK backoff, undecodable messages terminated). The JetStream driver ships code-complete and integration-tested; `cmd` process wiring still boots the in-process bus and says so (`ORVEXA_BUS_DRIVER=nats` currently logs the fallback in `cmd/worker`) — flipping the binaries to the driver is the remaining glue step under roadmap [#10](../../issues/10).
+The bus has two drivers behind one `platform/bus.Bus` interface: the in-process default and a NATS JetStream driver (`internal/platform/bus/nats.go` — synchronous bounded publishes, durable pull consumers per subscription, bounded NAK backoff, undecodable messages terminated). The JetStream driver ships code-complete and integration-tested; `cmd` process wiring still boots the in-process bus and says so (`ORVEXA_BUS_DRIVER=nats` currently logs the fallback in `cmd/worker`) — flipping the binaries to the driver is the remaining glue step under roadmap [#10](https://github.com/Roy-Wanyoike/Orvexa/issues/10).
 
 ## Communications
 
@@ -110,7 +110,7 @@ Search is a read-model luxury, never a dependency of the hot path ([ADR-0004](ad
 | Workflows | durable Postgres engine (default) · Temporal driver | build tag `temporal` + `ORVEXA_TEMPORAL_URL` | engine path untouched by default ([ADR-0009](adr/0009-temporal-driver.md)) |
 | Identity | API-key only (default) · OIDC + capability RBAC | `ORVEXA_OIDC_*` | API-key path byte-identical when unset |
 
-The presence/limiter Redis drivers and the JetStream bus driver ship as tested library swap points (`NewPresenceCacheFromEnv`, `NewRateLimitFromEnv`, `NewNATSFromEnv`); wiring them into the `cmd` binaries is the remaining glue work tracked under roadmap [#10](../../issues/10). The search service, the ClickHouse facts sink and the OIDC identity plane **are** wired into `cmd` today. Every driver is optional: the default profile boots with zero external dependencies.
+The presence/limiter Redis drivers and the JetStream bus driver ship as tested library swap points (`NewPresenceCacheFromEnv`, `NewRateLimitFromEnv`, `NewNATSFromEnv`); wiring them into the `cmd` binaries is the remaining glue work tracked under roadmap [#10](https://github.com/Roy-Wanyoike/Orvexa/issues/10). The search service, the ClickHouse facts sink and the OIDC identity plane **are** wired into `cmd` today. Every driver is optional: the default profile boots with zero external dependencies.
 
 ## Deployment topology
 
