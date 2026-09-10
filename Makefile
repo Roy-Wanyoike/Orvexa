@@ -36,3 +36,34 @@ migrations:
 # Guard: TODO/FIXME markers must be intentional debt, not silent gaps.
 lint-todos:
 	@! grep -RInE "TODO|FIXME|HACK|XXX" --include="*.go" internal cmd pkg | grep -v "_test.go" || true
+
+# --- Devstack + integration ([O-14] issue #23) — appended; existing target commands unchanged ---
+.PHONY: devstack-up devstack-down devstack-status devstack-clean integration
+
+DEVSTACK := scripts/devstack.sh
+
+# Userland PostgreSQL 16 (Zonky binaries, loopback bind). No docker/sudo needed.
+devstack-up:
+	@$(DEVSTACK) start
+
+devstack-down:
+	@$(DEVSTACK) stop
+
+devstack-status:
+	@$(DEVSTACK) status
+
+devstack-clean:
+	@$(DEVSTACK) clean
+
+# One-command integration suite: auto-starts the devstack when
+# ORVEXA_TEST_DATABASE_URL is not already provided (external DB override),
+# then runs the tagged tests with the race detector.
+integration:
+	@set -euo pipefail; \
+	url="$${ORVEXA_TEST_DATABASE_URL:-}"; \
+	if [ -z "$$url" ]; then \
+		$(DEVSTACK) start; \
+		url="$$($(DEVSTACK) url)"; \
+	fi; \
+	echo "== integration suite against $$(echo "$$url" | sed -E 's#//([^:/@]+):[^@]*@#//\1:***@#')"; \
+	ORVEXA_TEST_DATABASE_URL="$$url" $(GO) test -race -tags=integration ./...
