@@ -21,40 +21,40 @@ contract.
 package twilio
 
 import (
-	"testing"
+        "testing"
 
-	"github.com/Roy-Wanyoike/orvexa/internal/comms/conformance"
+        "github.com/Roy-Wanyoike/orvexa/internal/comms/conformance"
 )
 
 func TestTwilioVoiceConformance(t *testing.T) {
-	rec := conformance.NewRecorder()
+        rec := conformance.NewRecorder()
 
-	// Construct the adapter with rec.Ingest as its webhook-delivery hook
-	// (comms.IngestFunc) and the adapter's own HMAC signer. Native Twilio
-	// status callbacks must be translated into comms.ProviderEvent and
-	// delivered through that hook — the same path the Simulator uses.
-	p := New(Config{
-		AccountSID: "AC_test",
-		AuthToken:  "test-only", // kit asserts signature presence, not HMAC
-		Ingest:     rec.Ingest,
-	})
+        // Construct the adapter with rec.Ingest as its webhook-delivery hook
+        // (comms.IngestFunc) and the adapter's own HMAC signer. Native Twilio
+        // status callbacks must be translated into comms.ProviderEvent and
+        // delivered through that hook — the same path the Simulator uses.
+        p := New(Config{
+                AccountSID: "AC_test",
+                AuthToken:  "test-only", // kit asserts signature presence, not HMAC
+                Ingest:     rec.Ingest,
+        })
 
-	conformance.RunVoiceConformance(t, p, conformance.Options{
-		Recorder:           rec,           // the SAME recorder the adapter delivers into
-		ProviderName:       "twilio",      // label pinned on every delivery
-		RequireAsyncEvents: true,          // Twilio callbacks arrive async
-		EventSettleTimeout: 2 * time.Second,
-	})
+        conformance.RunVoiceConformance(t, p, conformance.Options{
+                Recorder:           rec,           // the SAME recorder the adapter delivers into
+                ProviderName:       "twilio",      // label pinned on every delivery
+                RequireAsyncEvents: true,          // Twilio callbacks arrive async
+                EventSettleTimeout: 2 * time.Second,
+        })
 }
 
 func TestTwilioSMSConformance(t *testing.T) {
-	rec := conformance.NewRecorder()
-	mp := NewSMS(Config{Ingest: rec.Ingest /* ... */})
-	conformance.RunMessagingConformance(t, mp, conformance.Options{
-		Recorder:     rec,
-		ProviderName: "twilio",
-		// EnforceSendValidation: true, // opt in if the adapter re-validates
-	})
+        rec := conformance.NewRecorder()
+        mp := NewSMS(Config{Ingest: rec.Ingest /* ... */})
+        conformance.RunMessagingConformance(t, mp, conformance.Options{
+                Recorder:     rec,
+                ProviderName: "twilio",
+                // EnforceSendValidation: true, // opt in if the adapter re-validates
+        })
 }
 ```
 
@@ -121,6 +121,18 @@ Defaults are honest: the zero value matches the Simulator.
 - **Network behavior.** Timeouts, backoff and rate limits are transport
   concerns; the kit is in-process by design.
 
+## Negative controls: the kit audits itself
+
+A conformance suite is only worth shipping if it demonstrably fails bad
+adapters. `negative_control_test.go` runs deliberately broken adapters —
+connected-before-ringing, silent success on unknown refs, a `call.ended`
+invented during hold, delivered-before-sent receipts, duplicate-rejecting
+sends — through the kit in child test processes (`os/exec` on the test
+binary, the standard Go self-test pattern) and asserts each run FAILS **for
+the designed reason**. This keeps every assertion in the tables above
+honest as the kit evolves: if the kit ever waves a violation through, or a
+control stops isolating its invariant, `TestKitNegativeControls` fails.
+
 ## Mechanics
 
 - `Recorder` implements `comms.IngestFunc`: it decodes each delivery into a
@@ -131,5 +143,7 @@ Defaults are honest: the zero value matches the Simulator.
   does this, mirroring the service that creates the interaction before
   invoking the provider). Events for unknown interactions fail as
   `interaction.not_found`, so phantom legs can never materialize state.
-- `git`-safe: no goroutines leak from the kit itself; the Recorder is
-  mutex-guarded and race-clean under `-race`.
+- Test hygiene: the kit itself spawns no goroutines; the Recorder is
+  mutex-guarded and race-clean under `-race`. The negative-control children
+  re-execute the test binary and inherit the same build flags (including
+  `-race`).
