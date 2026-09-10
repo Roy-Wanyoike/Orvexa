@@ -39,12 +39,12 @@ const (
 
 // Step names — the auditable trace of what a workflow did.
 const (
-	StepScheduled    = "scheduled"
-	StepWaited       = "waited"
-	StepContacted    = "contacted"
-	StepEscalated    = "escalated"
-	StepClosed       = "closed"
-	StepTaskCreated  = "task_created"
+	StepScheduled   = "scheduled"
+	StepWaited      = "waited"
+	StepContacted   = "contacted"
+	StepEscalated   = "escalated"
+	StepClosed      = "closed"
+	StepTaskCreated = "task_created"
 )
 
 // Instance is the durable workflow record.
@@ -87,10 +87,10 @@ func NewEngine(pool *pgxpool.Pool, writer *outbox.Writer, services Services, sou
 
 // StartCallbackInput schedules a callback for a customer.
 type StartCallbackInput struct {
-	CustomerID string `json:"customer_id"`
-	Phone      string `json:"phone"`
+	CustomerID string    `json:"customer_id"`
+	Phone      string    `json:"phone"`
 	ScheduleAt time.Time `json:"schedule_at"`
-	Notes      string `json:"notes"`
+	Notes      string    `json:"notes"`
 }
 
 // StartCallback creates a callback workflow: schedule → wait → contact.
@@ -115,10 +115,10 @@ func (e *Engine) StartCallback(ctx context.Context, tenantID string, in StartCal
 
 // StartCollectionsInput drives a collections ladder for an invoice reference.
 type StartCollectionsInput struct {
-	CustomerID  string `json:"customer_id"`
-	InvoiceRef  string `json:"invoice_ref"`
-	AmountDue   int64  `json:"amount_due"`
-	Phone       string `json:"phone"`
+	CustomerID string `json:"customer_id"`
+	InvoiceRef string `json:"invoice_ref"`
+	AmountDue  int64  `json:"amount_due"`
+	Phone      string `json:"phone"`
 }
 
 // StartCollections creates the ladder: SMS → wait 2d → WhatsApp → wait 3d →
