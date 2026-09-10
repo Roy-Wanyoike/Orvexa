@@ -268,7 +268,10 @@ func (s *Service) Verify(ctx context.Context, raw string) (*Claims, error) {
 		jwt.WithExpirationRequired(),
 		jwt.WithLeeway(s.cfg.Leeway),
 	)
-	tok, err := parser.Parse(raw, s.jwks.keyFunc(ctx, kid))
+	// ParseWithClaims targets *Claims: plain Parse decodes into MapClaims,
+	// which would make the typed claim assertion below fail for EVERY token
+	// (caught by the forgery-matrix tests).
+	tok, err := parser.ParseWithClaims(raw, &Claims{}, s.jwks.keyFunc(ctx, kid))
 	if err != nil {
 		return nil, invalidToken(mapParseError(err))
 	}
