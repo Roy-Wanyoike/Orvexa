@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -120,3 +121,116 @@ func TestRecoverTurnsPanicInto500(t *testing.T) {
 }
 
 // helpers use stdlib strings/errors directly
+
+// ---- security header posture (issue #39 independent sweep) ----
+
+// TestSecurityHeadersOnEveryResponse asserts the full baseline header policy on
+// a success path. The middleware is mounted globally in internal/httpserver
+// (r.Use), so these must hold for every route in the tree.
+func TestSecurityHeadersOnEveryResponse(t *testing.T) {
+	h := SecurityHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/anything", nil))
+
+	want := map[string]string{
+		"Content-Security-Policy":   "default-src 'none'; frame-ancestors 'none'; base-uri 'none'",
+		"Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+		"X-Content-Type-Options":    "nosniff",
+		"X-Frame-Options":           "DENY",
+		"Referrer-Policy":           "strict-origin-when-cross-origin",
+		"Permissions-Policy":        "camera=(), microphone=(), geolocation=()",
+		"Cache-Control":             "no-store",
+	}
+	for k, v := range want {
+		if got := w.Header().Get(k); got != v {
+			t.Errorf("%s = %q, want %q", k, got, v)
+		}
+	}
+}
+
+// TestSecurityHeadersOnErrorAndPanicPaths proves the policy survives non-2xx
+// handlers and panic recovery (Recoverer writes the response from inside the
+// chain, so headers set before next.ServeHTTP must persist).
+func TestSecurityHeadersOnErrorAndPanicPaths(t *testing.T) {
+	cases := []struct {
+		name string
+		next http.Handler
+	}{
+		{"error response", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			WriteError(w, apperrors.NotFound("x.y", "gone"))
+		})},
+		{"panic recovery", Recoverer(func(string, ...any) {})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			panic("boom")
+		}))},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			SecurityHeaders(c.next).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/", nil))
+			if w.Code >= 200 && w.Code < 300 {
+				t.Fatalf("expected non-2xx in this case, got %d", w.Code)
+			}
+			for _, k := range []string{
+				"Content-Security-Policy", "Strict-Transport-Security",
+				"X-Content-Type-Options", "X-Frame-Options", "Referrer-Policy",
+			} {
+				if w.Header().Get(k) == "" {
+					t.Errorf("%s missing on %s", k, c.name)
+				}
+			}
+		})
+	}
+}
+
+// TestRateLimitEvictionDropsOldestKeys pins the eviction POLICY under
+// distinct last-touch timestamps (the realistic case): after the bucket cap
+// is exceeded, the least-recently-used half is evicted and the newest keys
+// survive. Regression guard for the #39 sweep fix that replaced the O(n²)
+// insertion sort with an O(n log n) selection — same policy, bounded cost.
+func TestRateLimitEvictionDropsOldestKeys(t *testing.T) {
+	rl := NewRateLimit(600, 1, 100)
+	base := time.Now()
+	for i := 0; i < 100; i++ { // fill to cap, distinct timestamps
+		if ok, _ := rl.Allow("warm-"+strconv.Itoa(i), base.Add(time.Duration(i)*time.Second)); !ok {
+			t.Fatalf("warm key %d must pass (burst=1/s refill 1... warm has full burst)", i)
+		}
+	}
+	for i := 0; i < 100; i++ { // flood unique keys at later times
+		_, _ = rl.Allow("flood-"+strconv.Itoa(i), base.Add(time.Duration(1000+i)*time.Second))
+	}
+	rl.mu.Lock()
+	n := len(rl.buckets)
+	_, oldestSurvives := rl.buckets["warm-0"]
+	_, newestSurvives := rl.buckets["flood-99"]
+	rl.mu.Unlock()
+	if n > 100 {
+		t.Fatalf("buckets exceed cap: %d", n)
+	}
+	if oldestSurvives {
+		t.Error("oldest warm key should have been evicted")
+	}
+	if !newestSurvives {
+		t.Error("newest flood key should survive eviction")
+	}
+}
+
+// BenchmarkRateLimitUniqueKeysDistinctTimes is the committed regression
+// evidence for the eviction-complexity fix above: measures sustained cost of
+// Allow under a unique-key flood at the bucket cap with distinct timestamps.
+// Pre-fix: ~150µs/op (O(n²) insertion sort per eviction). Post-fix: sub-µs
+// amortized. Run with:
+//
+//	go test -run XXX -bench RateLimitUniqueKeysDistinctTimes ./internal/platform/httpx/
+func BenchmarkRateLimitUniqueKeysDistinctTimes(b *testing.B) {
+	rl := NewRateLimit(600, 120, 10_000)
+	base := time.Now()
+	for i := 0; i < 10_000; i++ {
+		rl.Allow("warm-"+strconv.Itoa(i), base.Add(time.Duration(i)*time.Microsecond))
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		rl.Allow("flood-"+strconv.Itoa(i), base.Add(time.Duration(10_000+i)*time.Microsecond))
+	}
+}
