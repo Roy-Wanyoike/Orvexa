@@ -22,3 +22,10 @@ coverage.txt
 .idea/
 .vscode/
 .DS_Store
+
+# devstack ([O-14] issue #23): userland postgres data, Zonky bundle cache, pids/logs
+.devstack/
+
+# local Go build/toolchain caches (userland toolchain, never commit)
+.gopath/
+toolchain/
