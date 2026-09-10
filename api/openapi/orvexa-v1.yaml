@@ -63,6 +63,55 @@ paths:
       responses: { '200': { description: OK }, '409': { $ref: '#/components/responses/Error409' } }
   /conversations/{id}/interactions:
     get: { summary: Interaction timeline of a conversation, parameters: [{ name: id, in: path, required: true, schema: { type: string } }, { $ref: '#/components/parameters/cursor' }], responses: { '200': { description: OK } } }
+  /search/conversations:
+    get:
+      summary: Full-text conversation search (OpenSearch read model)
+      description: |
+        Event-sourced projection of conversations/interactions into the orvexa-conversations
+        index; eventually consistent with the relational source of truth.
+        The tenant filter is applied SERVER-SIDE from the authenticated API key — there is
+        no tenant parameter, a client cannot express a cross-tenant search.
+        Degradation principle: a search outage never blocks the hot path. Backend down/hung
+        answers 503 error.code=search.unavailable (bounded per-request deadline); a deployment
+        without a search backend answers 503 error.code=search.not_configured.
+      parameters:
+        - { name: q, in: query, required: true, description: 'Simple query string over projected search text, customer and channel.', schema: { type: string, minLength: 1, maxLength: 256 } }
+        - { name: limit, in: query, description: Maximum hits (server-capped)., schema: { type: integer, default: 25, maximum: 50, minimum: 1 } }
+      responses:
+        '200':
+          description: OK (envelope data = {total, limit, hits[]})
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      total: { type: integer, description: Hits within the tenant scope for this query }
+                      limit: { type: integer }
+                      hits:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            conversation_id: { type: string }
+                            customer_id: { type: string }
+                            channel: { type: string, enum: [voice, whatsapp, sms, email, chat, ussd] }
+                            status: { type: string, enum: [open, closed] }
+                            interaction_count: { type: integer }
+                            last_interaction:
+                              type: object
+                              properties:
+                                id: { type: string }
+                                channel: { type: string }
+                                direction: { type: string, enum: [inbound, outbound] }
+                                status: { type: string }
+                            opened_at: { type: string, format: date-time }
+                            updated_at: { type: string, format: date-time }
+                            score: { type: number }
+        '422': { $ref: '#/components/responses/Error422' }
+        '503': { description: Search degraded (error.code=search.unavailable when the backend is down, search.not_configured when unset) }
   /interactions:
     post:
       summary: Create an interaction (conversation auto-opened when omitted)
