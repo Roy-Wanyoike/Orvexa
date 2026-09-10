@@ -10,6 +10,8 @@ Copy `.env.example` → `.env`. Every setting has a safe local default; the plat
 | `ORVEXA_REALTIME_ADDR` | `:8081` | WebSocket gateway |
 | `ORVEXA_DATABASE_URL` | *(empty)* | PostgreSQL. Empty = degraded boot (no durable storage; readiness reports truth). Required for worker + realtime. |
 | `ORVEXA_BUS_DRIVER` | `inproc` | `nats` requires the NATS driver (tracked issue O-10) |
+| `ORVEXA_NATS_URL` | `nats://localhost:4222` | JetStream subjects when `ORVEXA_BUS_DRIVER=nats` |
+| `ORVEXA_OPENSEARCH_URL` | *(empty)* | Conversation search backend (issue #36). Empty = search off — the API boots normally and `GET /api/v1/search/conversations` answers the typed 503 `search.not_configured`. A down backend answers 503 `search.unavailable`; search is a read model and NEVER blocks the interaction hot path (the indexer sheds events instead of slowing publishers). `ORVEXA_OPENSEARCH_INDEX` overrides the default `orvexa-conversations`. |
 | `ORVEXA_WEBHOOK_HMAC_SECRET` | *(empty)* | **Set in any shared environment.** Empty secret refuses all webhook ingestion (fail-closed). |
 | `ORVEXA_COMMS_PROVIDER` | `simulator` | simulator performs no network I/O and signs payloads like a real carrier |
 | `ORVEXA_AI_PROVIDER` | `rules` | deterministic provider; LLM endpoints are config-level adapters |
