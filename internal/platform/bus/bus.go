@@ -1,8 +1,11 @@
 // Package bus abstracts the event backbone. The Interaction Plane publishes;
 // Intelligence/Execution/Control planes consume. Drivers:
 //   - InProc: fan-out to in-memory subscribers (default profile, CI, local dev)
-//   - NATS:   JetStream-shaped subject mapping (production profile; enabled
-//     via ORVEXA_BUS_DRIVER=nats — adapter lands with the infrastructure wave)
+//   - NATS:   JetStream-backed durable bus (production profile; see nats.go —
+//     stream orvexa-events on subjects orvexa.<type>, durable pull consumers
+//     per subscription, ack/nak with bounded backoff. Opt-in only: the driver
+//     is constructed exclusively when ORVEXA_NATS_URL is set, so the InProc
+//     default stays byte-identical)
 //
 // Delivery contract: at-least-once. Consumers MUST dedupe by Envelope.ID.
 package bus
