@@ -1,0 +1,191 @@
+{
+  "title": "Webhook verifier adversarial attack matrix (issue #24)",
+  "provenance": "Executed by TestAttackMatrix in verify_test.go. Every case is really run against the Go verifiers; 'expect' is the required outcome. Secrets are the synthetic clearly-fake credentials from the golden fixtures.",
+  "expect_values": {
+    "accept": "verifier must return nil (control cases proving the happy path is not over-tightened)",
+    "reject": "verifier must return a 401-class application error (fail-closed)",
+    "accept-with-warn": "verifier returns nil AND emits a structured residual-risk warning (Africa's Talking, allowlist unconfigured)"
+  },
+  "cases": [
+    {
+      "id": "tw-valid",
+      "provider": "twilio",
+      "attack": "control: golden vector signed with the configured token",
+      "expect": "accept"
+    },
+    {
+      "id": "tw-wrong-token",
+      "provider": "twilio",
+      "attack": "signature computed with an attacker-chosen token not in the configured list",
+      "expect": "reject"
+    },
+    {
+      "id": "tw-body-substituted",
+      "provider": "twilio",
+      "attack": "body substituted after signing (valid signature, different form body)",
+      "expect": "reject"
+    },
+    {
+      "id": "tw-replay-different-body",
+      "provider": "twilio",
+      "attack": "signature replayed against a different body",
+      "expect": "reject"
+    },
+    {
+      "id": "tw-missing-header",
+      "provider": "twilio",
+      "attack": "X-Twilio-Signature header absent",
+      "expect": "reject"
+    },
+    {
+      "id": "tw-empty-token-list",
+      "provider": "twilio",
+      "attack": "no auth tokens configured (misconfiguration must fail closed, never open)",
+      "expect": "reject"
+    },
+    {
+      "id": "tw-bad-base64",
+      "provider": "twilio",
+      "attack": "signature header is not valid base64",
+      "expect": "reject"
+    },
+    {
+      "id": "tw-trailing-newline",
+      "provider": "twilio",
+      "attack": "body differs from the signed bytes by a trailing newline only",
+      "expect": "reject"
+    },
+    {
+      "id": "tw-internal-url",
+      "provider": "twilio",
+      "attack": "valid external signature evaluated against the internal/proxy URL (URL-reconstruction pitfall)",
+      "expect": "reject"
+    },
+    {
+      "id": "tw-json-body-not-form-signed",
+      "provider": "twilio",
+      "attack": "non-form (JSON) body signed by concatenation with the real token; verifier form-parses so the signed payloads differ",
+      "expect": "reject"
+    },
+    {
+      "id": "wa-valid",
+      "provider": "whatsappcloud",
+      "attack": "control: golden vector signed with the configured app secret",
+      "expect": "accept"
+    },
+    {
+      "id": "wa-wrong-secret",
+      "provider": "whatsappcloud",
+      "attack": "signature computed with a different app secret",
+      "expect": "reject"
+    },
+    {
+      "id": "wa-body-substituted",
+      "provider": "whatsappcloud",
+      "attack": "body substituted after signing",
+      "expect": "reject"
+    },
+    {
+      "id": "wa-replay-different-body",
+      "provider": "whatsappcloud",
+      "attack": "signature replayed against a different body",
+      "expect": "reject"
+    },
+    {
+      "id": "wa-missing-header",
+      "provider": "whatsappcloud",
+      "attack": "X-Hub-Signature-256 header absent",
+      "expect": "reject"
+    },
+    {
+      "id": "wa-empty-secret",
+      "provider": "whatsappcloud",
+      "attack": "empty app secret configured (HMAC with empty key must never become an open path)",
+      "expect": "reject"
+    },
+    {
+      "id": "wa-nonhex-digest",
+      "provider": "whatsappcloud",
+      "attack": "digest contains non-hex bytes",
+      "expect": "reject"
+    },
+    {
+      "id": "wa-truncated-digest",
+      "provider": "whatsappcloud",
+      "attack": "digest truncated (wrong MAC length)",
+      "expect": "reject"
+    },
+    {
+      "id": "wa-wrong-prefix",
+      "provider": "whatsappcloud",
+      "attack": "legacy sha1 scheme marker in the 256 header",
+      "expect": "reject"
+    },
+    {
+      "id": "wa-trailing-newline",
+      "provider": "whatsappcloud",
+      "attack": "body differs from the signed bytes by a trailing newline only",
+      "expect": "reject"
+    },
+    {
+      "id": "wa-uppercase-hex",
+      "provider": "whatsappcloud",
+      "attack": "control: same MAC encoded uppercase — proves raw-byte constant-time compare, not hex-string compare",
+      "expect": "accept"
+    },
+    {
+      "id": "wa-first-byte-flipped",
+      "provider": "whatsappcloud",
+      "attack": "MAC with first byte corrupted",
+      "expect": "reject"
+    },
+    {
+      "id": "wa-last-byte-flipped",
+      "provider": "whatsappcloud",
+      "attack": "MAC with last byte corrupted (same rejection class as first-byte — compare is position-independent)",
+      "expect": "reject"
+    },
+    {
+      "id": "at-allowlist-match",
+      "provider": "africastalking",
+      "attack": "control: peer inside configured allowlist (AT signs nothing — allowlist is the only control)",
+      "expect": "accept"
+    },
+    {
+      "id": "at-outside-allowlist",
+      "provider": "africastalking",
+      "attack": "peer outside configured allowlist",
+      "expect": "reject"
+    },
+    {
+      "id": "at-missing-peer",
+      "provider": "africastalking",
+      "attack": "peer-identity header absent while allowlist configured",
+      "expect": "reject"
+    },
+    {
+      "id": "at-garbage-peer",
+      "provider": "africastalking",
+      "attack": "peer-identity header unparseable while allowlist configured",
+      "expect": "reject"
+    },
+    {
+      "id": "at-malformed-cidr",
+      "provider": "africastalking",
+      "attack": "allowlist entry has host bits set; entry disabled, delivery rejected",
+      "expect": "reject"
+    },
+    {
+      "id": "at-forged-xff-uncompliant-edge",
+      "provider": "africastalking",
+      "attack": "forged XFF leftmost entry claiming an allowed IP — DISCARDED under the rightmost-entry trust model (client-asserted entries cannot fake membership behind an appending edge)",
+      "expect": "reject"
+    },
+    {
+      "id": "at-unconfigured-allowlist",
+      "provider": "africastalking",
+      "attack": "allowlist not configured: accepted WITHOUT verification but a structured residual-risk warning must be emitted",
+      "expect": "accept-with-warn"
+    }
+  ]
+}
