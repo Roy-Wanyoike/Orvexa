@@ -29,3 +29,6 @@ coverage.txt
 # local Go build/toolchain caches (userland toolchain, never commit)
 .gopath/
 toolchain/
+
+# release engineering ([O-37] issue #46): local release artifacts
+/dist/
