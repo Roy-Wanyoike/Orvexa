@@ -38,8 +38,6 @@ type Config struct {
 	LogLevel     string
 	Env          string
 
-	BootstrapAPIKey string
-
 	AIProvider   AIProvider
 	AILLMBaseURL string
 	AILLMAPIKey  string
@@ -90,8 +88,6 @@ func Load() (Config, error) {
 		NATSURL:      env("ORVEXA_NATS_URL", "nats://localhost:4222"),
 		LogLevel:     env("ORVEXA_LOG_LEVEL", "info"),
 		Env:          env("ORVEXA_ENV", "development"),
-
-		BootstrapAPIKey: os.Getenv("ORVEXA_BOOTSTRAP_API_KEY"),
 
 		AIProvider:   AIProvider(env("ORVEXA_AI_PROVIDER", string(AIRules))),
 		AILLMBaseURL: os.Getenv("ORVEXA_AI_LLM_BASE_URL"),
