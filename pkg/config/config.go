@@ -49,6 +49,15 @@ type Config struct {
 	CommsProvider     string
 	WebhookHMACSecret string
 
+	// Communications provider selection (additive, [O-13]). Names only:
+	// credential parsing, validation and redaction are owned by
+	// internal/comms/registry (the single source of truth for provider
+	// names and credential shapes); this kernel stays dependency-free and
+	// therefore does not validate the values. Defaults keep the
+	// zero-dependency simulator boot posture.
+	TelephonyProvider string
+	MessagingProvider string
+
 	// Realtime connection caps.
 	WSMaxPerPrincipal int
 	WSMaxTotal        int
@@ -92,6 +101,9 @@ func Load() (Config, error) {
 
 		CommsProvider:     env("ORVEXA_COMMS_PROVIDER", "simulator"),
 		WebhookHMACSecret: os.Getenv("ORVEXA_WEBHOOK_HMAC_SECRET"),
+
+		TelephonyProvider: env("ORVEXA_TELEPHONY_PROVIDER", "simulator"),
+		MessagingProvider: env("ORVEXA_MESSAGING_PROVIDER", "simulator"),
 
 		WSMaxPerPrincipal: envInt("ORVEXA_WS_MAX_PER_PRINCIPAL", 10),
 		WSMaxTotal:        envInt("ORVEXA_WS_MAX_TOTAL", 10000),
