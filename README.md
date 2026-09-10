@@ -148,3 +148,47 @@ curl -s -X POST -H "X-API-Key: $ORVEXA_KEY" -H 'Content-Type: application/json' 
 
 Analytics facts are asynchronous (worker consumes the outbox): give it a beat, then `GET /api/v1/analytics/summary`. Configuration reference: [operations runbook](docs/runbooks/operations.md).
 
+## Repository map
+
+| Path | What it is |
+|---|---|
+| [`cmd/`](cmd) | Deployables: `api` (REST + ingress), `worker` (dispatcher + consumers), `realtime` (WebSocket fan-out) |
+| [`internal/`](internal) | Domain modules — `customers` · `conversations` · `interactions` · `cases` · `queues` · `agents` · `routing` · `telephony` · `messaging` · `comms` (+ [conformance kit](internal/comms/conformance/README.md)) · `webhooks` · `realtime` · `ai` · `tools` · `workflows` · `analytics` · `search` · `identity` · `tenancy` · `httpserver` · `platform` (bus, outbox, httpx, db) |
+| [`pkg/`](pkg) | Shared kernels: events (closed topic registry), errors, idempotency, pagination, config, logging |
+| [`migrations/`](migrations) | 12 ordered, forward-only SQL migrations (11 PostgreSQL + 1 ClickHouse engine-specific) |
+| [`api/openapi/`](api/openapi) | [Orvexa API v1](api/openapi/orvexa-v1.yaml) — 40 paths, envelope + stable machine error codes, contract-tested |
+| [`docs/`](docs) | [Architecture](docs/architecture.md) · [domain map](docs/domains.md) · [RBAC](docs/rbac.md) · [runbook](docs/runbooks/operations.md) · [devstack](docs/devstack.md) · [ADRs](docs/adr) · [security](docs/security/security-posture.md) |
+| [`qa/`](qa) | Release-gate report: [QA_REPORT.md](qa/QA_REPORT.md) — the evidence-backed verdict |
+| [`scripts/`](scripts) | [devstack.sh](scripts/devstack.sh) · [e2e-demo.sh](scripts/e2e-demo.sh) · [security-scan.sh](scripts/security-scan.sh) |
+| [`tests/`](tests) | [contract](tests/contract) (OpenAPI ⇄ router) · [integration](tests/integration) (DB-backed, tag-gated) |
+| [`Makefile`](Makefile) | `make race` · `make integration` · `make devstack-up` · `make lint-todos` |
+
+## For investors
+
+- **Market.** Contact centers are a large, sticky category still sold as seats-and-minutes CRUD. Orvexa is the platform layer underneath: conversations as first-class infrastructure with an event backbone every AI capability can safely plug into. The leverage is agent time — metered AI suggestions, audited tool calls and durable workflows that complete follow-ups without a human holding the thread.
+- **Defensible architecture.** The moat is the contract set: hexagonal carrier ports + conformance kits make new carriers cheap and safe; the transactional outbox makes every state change auditable and replayable; capability RBAC and tenant isolation are enforced by construction, not by review; OpenAPI contract tests keep the surface stable for integrators. Competitors must rebuild discipline that is already pinned by tests here.
+- **Pilot readiness.** Quoting [qa/QA_REPORT.md](qa/QA_REPORT.md): *"**GO for pilot onboarding (single-tenant pilots, sandbox/demo posture)**"* — "the full interaction loop … is implemented end to end with zero external dependencies in the default profile, and clean extraction paths to production infrastructure. Known limitations are documented below and tracked as issues; none are silent."
+- **Honest limitations** (same report, §5): no hosted CI on this account (the local ADR-0003 matrix is the authoritative gate; CI workflow is armed), production carriers/NATS/Redis wired as tested library swap points pending binary glue ([roadmap](https://github.com/Roy-Wanyoike/Orvexa/issues/10)), SQL-first tenant bootstrap, single-region posture. Trust is the product — the ledger is public.
+
+## For engineers — six things worth stealing
+
+1. **Hexagonal carriers with a self-auditing conformance kit.** Adapters embed a lifecycle contract; broken adapters are proven to fail it ([negative controls](internal/comms/conformance/README.md)).
+2. **Transactional outbox done properly.** One SQL transaction for state + events, `SKIP LOCKED` leasing, at-least-once delivery, idempotent consumers, a [closed topic registry](pkg/events) that makes unregistered topics impossible.
+3. **A real AI security boundary.** The tool gateway is deny-by-default with schema validation, per-agent rate isolation and audited refusals — AI never holds credentials ([internal/tools](internal/tools)).
+4. **Capability RBAC without cookie-soup.** RS256-only OIDC verification with kid rotation + amplification floors, static role catalog pinned Go↔SQL, revocation inside the token's cryptographically-valid lifetime ([docs/rbac.md](docs/rbac.md)).
+5. **Durable workflows as data.** Deterministic steps, timer rows, immutable step trace, crash-safe resume — with an optional Temporal driver behind a build tag ([ADR-0006](docs/adr/0006-durable-workflows.md), [ADR-0009](docs/adr/0009-temporal-driver.md)).
+6. **Truthful operations.** `/readyz` that lies is debt: health reports component truth, workers fail fast when they cannot do their job, degradation is typed (`search.not_configured`, 429 + `Retry-After`), and the [runbook](docs/runbooks/operations.md) documents every env var the code reads.
+
+## Roadmap
+
+Shipped: foundation → domain core → event backbone → communications → routing → realtime → intelligence → execution → release gate → devstack → carriers → search/Redis/Temporal → OIDC RBAC → security sweep → contract tests (issues #1–#41, all merged via PR — see [QA §6](qa/QA_REPORT.md)).
+
+Next, per umbrella [#10](https://github.com/Roy-Wanyoike/Orvexa/issues/10): wire the JetStream bus driver and Redis presence/limiter drivers into the binaries (both shipped and integration-tested as library swap points) · LLM adapter wiring behind the AI gateway · real-carrier production runs per-adapter acceptance criteria · admin/onboarding API to replace SQL bootstrap ([#56](https://github.com/Roy-Wanyoike/Orvexa/issues/56)) · multi-region readiness per [ADR-0007](docs/adr/0007-multi-region-readiness-region-isolation.md).
+
+## Honest limitations
+
+From [qa/QA_REPORT.md §5](qa/QA_REPORT.md) and this PR's verification: the default profile runs the in-process bus and simulator carrier (production drivers are swap points, not yet wired into `cmd`) · no hosted CI — the local matrix is the gate ([ADR-0003](docs/adr/0003-verification-without-hosted-actions.md)) · tenant bootstrap is SQL (no admin API yet) · single-region, single-Postgres posture · [`scripts/e2e-demo.sh`](scripts/e2e-demo.sh) needs a payload refresh to match the strict processor vocabulary ([#89](https://github.com/Roy-Wanyoike/Orvexa/issues/89)) and the second outbound call per tenant is blocked by an empty-`provider_ref` dedupe collision ([#90](https://github.com/Roy-Wanyoike/Orvexa/issues/90)) — both verified while validating the quickstart above, which stays inside the proven path.
+
+## License
+
+[MIT](LICENSE) — © 2026 Orvexa contributors.
