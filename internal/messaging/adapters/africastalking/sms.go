@@ -191,10 +191,14 @@ func New(cfg Config) (*Adapter, error) {
 	if cfg.MaxDelay <= 0 {
 		cfg.MaxDelay = defaultMaxDelay
 	}
-	attempts := cfg.MaxRetries + 1
-	if attempts < 1 {
-		attempts = 1
+	if cfg.MaxRetries <= 0 {
+		// The zero value selects the documented default budget (Config doc):
+		// an adapter that never retries would fail real interactions on
+		// harmless 429s/transport blips. There is deliberately no
+		// MaxRetries=0 escape hatch — the budget is bounded either way.
+		cfg.MaxRetries = defaultMaxRetries
 	}
+	attempts := cfg.MaxRetries + 1
 	logger := cfg.Logger
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
@@ -399,10 +403,13 @@ type smsRecipient struct {
 	MessageID  string `json:"messageId"`
 }
 
-// smsResponse is the synchronous send response envelope.
+// smsResponse is the synchronous send response envelope: the carriers
+// documented shape is {"SMSMessageData":{"Recipients":[…]}} — the
+// Recipients tag must match the wire, or every accepted send parses as
+// empty and fails the client (at.malformed_response).
 type smsResponse struct {
 	SMSMessageData struct {
-		Recipients []smsRecipient `json:"SMSMessageData"`
+		Recipients []smsRecipient `json:"Recipients"`
 	} `json:"SMSMessageData"`
 }
 

@@ -183,10 +183,15 @@ func (a *Adapter) TranslateUssdCallback(ctx context.Context, raw []byte) (string
 
 // ussdWire renders the reply for the carrier: the handler's text is passed
 // through verbatim when it already carries AT's wire prefix, else it is
-// prefixed per End. Returns the wire text and whether the session ends.
+// prefixed per End. An empty reply renders as the empty string so the
+// caller can reject it (ussd.empty_reply): an empty screen is a handler
+// bug, never a valid carrier answer. Returns the wire text and whether the
+// session ends.
 func ussdWire(reply UssdReply) (string, bool) {
 	text := reply.Text
 	switch {
+	case strings.TrimSpace(text) == "":
+		return "", false
 	case strings.HasPrefix(text, "END "):
 		return text, true
 	case strings.HasPrefix(text, "CON "):
