@@ -73,3 +73,23 @@ services:
 
 volumes:
   orvexa-dev-pgdata:
+
+  # Temporal (optional profile: docker compose --profile temporal up)
+  # Adopted only by deployments building with -tags=temporal (ADR-0009).
+  temporal:
+    image: temporalio/auto-setup:1.25.2
+    profiles: ["temporal"]
+    ports: ["7233:7233"]
+    environment:
+      - DB=postgresql
+      - POSTGRES_SEEDS=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PWD=postgres
+    depends_on: [postgres]
+  temporal-ui:
+    image: temporalio/ui:2.26.2
+    profiles: ["temporal"]
+    ports: ["8081:8080"]
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+    depends_on: [temporal]
