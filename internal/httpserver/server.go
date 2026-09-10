@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Roy-Wanyoike/orvexa/internal/identity"
+	"github.com/Roy-Wanyoike/orvexa/internal/platform/buildinfo"
 	"github.com/Roy-Wanyoike/orvexa/internal/platform/db"
 	"github.com/Roy-Wanyoike/orvexa/internal/platform/httpx"
 )
@@ -70,9 +71,14 @@ func New(d Deps) http.Handler {
 	return r
 }
 
-// handleLiveness always answers 200 — the process is alive.
+// handleLiveness always answers 200 — the process is alive. The version
+// field ([O-37] issue #46) is additive: ldflags-stamped release identity so
+// operations can identify any running build.
 func handleLiveness(w http.ResponseWriter, _ *http.Request) {
-	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "alive"}, nil)
+	httpx.WriteJSON(w, http.StatusOK, map[string]string{
+		"status":  "alive",
+		"version": buildinfo.String(),
+	}, nil)
 }
 
 // handleReadiness reports component health: the database.
@@ -86,8 +92,9 @@ func handleReadiness(pool *pgxpool.Pool) http.HandlerFunc {
 			code = http.StatusServiceUnavailable
 		}
 		httpx.WriteJSON(w, code, map[string]any{
-			"status": status,
-			"checks": []map[string]any{{"name": "db", "status": upDown(dbOK)}},
+			"status":  status,
+			"version": buildinfo.String(), // additive stamp ([O-37] issue #46)
+			"checks":  []map[string]any{{"name": "db", "status": upDown(dbOK)}},
 		}, nil)
 	}
 }
