@@ -1,0 +1,87 @@
+{
+  "provider": "africasTalking",
+  "scheme": "NO SIGNATURE SURFACE — documented AT callbacks carry no HMAC/checksum; control = peer-IP allowlist (fail-closed when configured)",
+  "provenance": "decision matrix fixture (see verify_africastalking.go doc); CIDRs are synthetic doc examples, not AT's published egress ranges",
+  "cases": [
+    {
+      "name": "peer-in-allowlist-allow",
+      "allowed_cidrs": [
+        "196.250.209.0/24",
+        "10.0.0.0/8"
+      ],
+      "peer_ip_header": "X-Forwarded-For",
+      "header_value": "196.250.209.77, 10.10.0.9",
+      "expect": "allow"
+    },
+    {
+      "name": "peer-ipv6-in-allowlist-allow",
+      "allowed_cidrs": [
+        "2001:db8:abcd::/48"
+      ],
+      "peer_ip_header": "X-Forwarded-For",
+      "header_value": "2001:db8:abcd::7",
+      "expect": "allow"
+    },
+    {
+      "name": "peer-ipv4in6-unmapped-allow",
+      "allowed_cidrs": [
+        "10.0.0.0/8"
+      ],
+      "peer_ip_header": "X-Forwarded-For",
+      "header_value": "::ffff:10.1.2.3",
+      "expect": "allow"
+    },
+    {
+      "name": "peer-outside-allowlist-reject",
+      "allowed_cidrs": [
+        "10.0.0.0/8"
+      ],
+      "peer_ip_header": "X-Forwarded-For",
+      "header_value": "203.0.113.7",
+      "expect": "reject"
+    },
+    {
+      "name": "forged-xff-not-overwritten-reject",
+      "allowed_cidrs": [
+        "10.0.0.0/8"
+      ],
+      "peer_ip_header": "X-Forwarded-For",
+      "header_value": "10.0.0.1, 203.0.113.7",
+      "expect": "reject"
+    },
+    {
+      "name": "peer-header-missing-fail-closed",
+      "allowed_cidrs": [
+        "10.0.0.0/8"
+      ],
+      "peer_ip_header": "X-Forwarded-For",
+      "header_value": "",
+      "expect": "reject"
+    },
+    {
+      "name": "peer-garbage-fail-closed",
+      "allowed_cidrs": [
+        "10.0.0.0/8"
+      ],
+      "peer_ip_header": "X-Forwarded-For",
+      "header_value": "not-an-ip",
+      "expect": "reject"
+    },
+    {
+      "name": "malformed-cidr-entry-fail-closed",
+      "allowed_cidrs": [
+        "10.0.0.1/8"
+      ],
+      "peer_ip_header": "X-Forwarded-For",
+      "header_value": "10.0.0.1",
+      "expect": "reject"
+    },
+    {
+      "name": "allowlist-unconfigured-warn-allow",
+      "allowed_cidrs": [],
+      "peer_ip_header": "X-Forwarded-For",
+      "header_value": "any",
+      "expect": "allow-with-structured-warn"
+    }
+  ]
+}
