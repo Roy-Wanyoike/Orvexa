@@ -247,6 +247,15 @@ func (fs *fakeSwitch) originateLines() []string {
 	return out
 }
 
+// forgetChannel makes the switch lose track of a channel it previously
+// originated — the server-side stand-in for a channel that died between the
+// dial and a later command ("-ERR no such channel" reply path).
+func (fs *fakeSwitch) forgetChannel(uuid string) {
+	fs.mu.Lock()
+	delete(fs.channels, uuid)
+	fs.mu.Unlock()
+}
+
 // setOriginateResult makes subsequent originate jobs complete with the
 // given api result payload (e.g. "-ERR NO_ANSWER").
 func (fs *fakeSwitch) setOriginateResult(payload string) {
