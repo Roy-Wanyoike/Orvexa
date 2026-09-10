@@ -35,6 +35,16 @@ type Client interface {
 // configuration is a validation error; unreachable frontends surface as
 // temporal.dial_failed with the cause attached (never swallowed).
 func dialClient(ctx context.Context, cfg Config) (Client, error) {
+	cl, err := dialSDK(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	return cl, nil // concrete SDK client satisfies the narrowed interface
+}
+
+// dialSDK connects and returns the SDK's concrete client interface (the
+// worker host needs the full surface; see worker.DialSDK).
+func dialSDK(ctx context.Context, cfg Config) (client.Client, error) {
 	if cfg.HostPort == "" {
 		return nil, apperrors.Invalid("temporal.url_required",
 			"ORVEXA_TEMPORAL_URL (host:port of the Temporal frontend) is required")
