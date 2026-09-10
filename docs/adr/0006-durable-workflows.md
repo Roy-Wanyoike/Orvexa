@@ -5,7 +5,7 @@
 
 ## Context
 
-Long-running processes (callbacks, collections ladders) must survive restarts, retry deterministically, and expose an auditable step trace. Temporal is the target engine (architecture doc §16), but standing up a Temporal cluster is not required to deliver the product's first workflow-driven behaviors.
+Long-running processes (callbacks, collections ladders) must survive restarts, retry deterministically, and expose an auditable step trace. Temporal is the target engine (architecture doc, Domain model — "Workflows are long-running, durable, step-traced processes"), but standing up a Temporal cluster is not required to deliver the product's first workflow-driven behaviors.
 
 ## Problem
 

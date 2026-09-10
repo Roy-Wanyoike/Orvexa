@@ -5,7 +5,7 @@
 
 ## Context
 
-The repository's CI workflow (`.github/workflows/ci.yml`) defines build + vet + `go test -race` + migration sanity gates. On the current owner account, GitHub Actions runs fail at startup (account-level Actions availability), independently of workflow correctness. This matches the established practice on this owner's prior projects: verification is performed locally and recorded as evidence.
+The repository's CI workflow (`.github/workflows/ci.yml`) defines build + vet + `go test -race` + migration sanity gates. On the current owner account, GitHub Actions runs fail at startup (account-level Actions availability), independently of workflow correctness. This matches the owner's established verification practice: verification is performed locally and recorded as evidence.
 
 ## Problem
 
