@@ -97,13 +97,15 @@ func (d *Driver) StartCallback(ctx context.Context, tenantID string, in StartCal
 	if when.Before(d.nowFunc()) {
 		return nil, apperrors.Invalid("workflow.schedule_past", "schedule_at must be in the future")
 	}
-	wfIn := CallbackInput{
-		TenantID: tenantID, CustomerID: in.CustomerID, Phone: in.Phone,
-		Notes: in.Notes, ScheduleAt: when,
+	wfIn := func(instanceID string) (any, any) {
+		return workflowRefs.CallbackWorkflow, CallbackInput{
+			InstanceID: instanceID, TenantID: tenantID, CustomerID: in.CustomerID,
+			Phone: in.Phone, Notes: in.Notes, ScheduleAt: when,
+		}
 	}
 	return d.start(ctx, tenantID, workflows.TypeCallback, map[string]any{
 		"customer_id": in.CustomerID, "phone": in.Phone, "notes": in.Notes,
-	}, when, workflows.StepScheduled, workflowRefs.CallbackWorkflow, wfIn)
+	}, when, workflows.StepScheduled, wfIn)
 }
 
 // StartCollections drives the collections ladder with engine-identical
@@ -118,20 +120,25 @@ func (d *Driver) StartCollections(ctx context.Context, tenantID string, in Start
 	if in.Phone == "" {
 		return nil, apperrors.Invalid("workflow.phone_required", "phone is required")
 	}
-	wfIn := CollectionsInput{
-		TenantID: tenantID, CustomerID: in.CustomerID, InvoiceRef: in.InvoiceRef,
-		AmountDue: in.AmountDue, Phone: in.Phone,
+	wfIn := func(instanceID string) (any, any) {
+		return workflowRefs.CollectionsWorkflow, CollectionsInput{
+			InstanceID: instanceID, TenantID: tenantID, CustomerID: in.CustomerID,
+			InvoiceRef: in.InvoiceRef, AmountDue: in.AmountDue, Phone: in.Phone,
+		}
 	}
 	return d.start(ctx, tenantID, workflows.TypeCollections, map[string]any{
 		"customer_id": in.CustomerID, "invoice_ref": in.InvoiceRef,
 		"amount_due": in.AmountDue, "phone": in.Phone,
-	}, d.nowFunc(), workflows.StepContacted, workflowRefs.CollectionsWorkflow, wfIn)
+	}, d.nowFunc(), workflows.StepContacted, wfIn)
 }
 
 // start persists the engine-parity instance (when a Store is wired) and hands
-// execution to Temporal. If Temporal rejects the start, the audit row is
-// marked failed so nothing is silently dropped — the inverse of degrade.
-func (d *Driver) start(ctx context.Context, tenantID, typ string, payload map[string]any, when time.Time, firstStep string, wf any, wfInput any) (*workflows.Instance, error) {
+// execution to Temporal. The mk callback builds the workflow reference and its
+// serializable input so the generated instance id travels with the workflow —
+// the audit activities key every transition off it. If Temporal rejects the
+// start, the audit row is marked failed so nothing is silently dropped — the
+// inverse of degrade.
+func (d *Driver) start(ctx context.Context, tenantID, typ string, payload map[string]any, when time.Time, firstStep string, mk func(instanceID string) (any, any)) (*workflows.Instance, error) {
 	inst := &workflows.Instance{
 		ID: uuid.NewString(), TenantID: tenantID, Type: typ,
 		// Engine parity: start() hardcodes waiting_timer (the first claimable
@@ -147,6 +154,7 @@ func (d *Driver) start(ctx context.Context, tenantID, typ string, payload map[st
 			return nil, err
 		}
 	}
+	wf, wfInput := mk(inst.ID)
 	if _, err := d.client.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:        WorkflowID(inst.ID),
 		TaskQueue: d.cfg.TaskQueue,
