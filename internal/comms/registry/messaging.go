@@ -35,20 +35,21 @@ type MessagingConfig struct {
 	ATSenderID Secret `json:"-"`
 }
 
-// envTargets maps every messaging env var to its struct field. Kept in
-// lockstep with the provider specs by the coverage tests.
-func (c *MessagingConfig) envTargets() map[string]*string {
-	return map[string]*string{
-		"ORVEXA_TWILIO_ACCOUNT_SID":       &c.TwilioAccountSID,
-		"ORVEXA_TWILIO_AUTH_TOKEN":        &c.TwilioAuthToken,
-		"ORVEXA_TWILIO_FROM_NUMBER":       &c.TwilioFromNumber,
-		"ORVEXA_WHATSAPP_PHONE_NUMBER_ID": &c.WhatsAppPhoneNumberID,
-		"ORVEXA_WHATSAPP_ACCESS_TOKEN":    &c.WhatsAppAccessToken,
-		"ORVEXA_WHATSAPP_APP_SECRET":      &c.WhatsAppAppSecret,
-		"ORVEXA_WHATSAPP_VERIFY_TOKEN":    &c.WhatsAppVerifyToken,
-		"ORVEXA_AT_USERNAME":              &c.ATUsername,
-		"ORVEXA_AT_API_KEY":               &c.ATAPIKey,
-		"ORVEXA_AT_SENDER_ID":             &c.ATSenderID,
+// envTargets maps every messaging env var to its struct field; every
+// messaging field is credential material, so all targets are secretRef.
+// Kept in lockstep with the provider specs by the coverage tests.
+func (c *MessagingConfig) envTargets() map[string]fieldRef {
+	return map[string]fieldRef{
+		"ORVEXA_TWILIO_ACCOUNT_SID":       secretRef(&c.TwilioAccountSID),
+		"ORVEXA_TWILIO_AUTH_TOKEN":        secretRef(&c.TwilioAuthToken),
+		"ORVEXA_TWILIO_FROM_NUMBER":       secretRef(&c.TwilioFromNumber),
+		"ORVEXA_WHATSAPP_PHONE_NUMBER_ID": secretRef(&c.WhatsAppPhoneNumberID),
+		"ORVEXA_WHATSAPP_ACCESS_TOKEN":    secretRef(&c.WhatsAppAccessToken),
+		"ORVEXA_WHATSAPP_APP_SECRET":      secretRef(&c.WhatsAppAppSecret),
+		"ORVEXA_WHATSAPP_VERIFY_TOKEN":    secretRef(&c.WhatsAppVerifyToken),
+		"ORVEXA_AT_USERNAME":              secretRef(&c.ATUsername),
+		"ORVEXA_AT_API_KEY":               secretRef(&c.ATAPIKey),
+		"ORVEXA_AT_SENDER_ID":             secretRef(&c.ATSenderID),
 	}
 }
 
@@ -64,7 +65,7 @@ func messagingFromLookup(get envGetter) (*MessagingConfig, error) {
 	targets := c.envTargets()
 	for _, fs := range spec.Messaging {
 		if v := strings.TrimSpace(get(fs.Env)); v != "" {
-			*targets[fs.Env] = v
+			targets[fs.Env].set(v)
 		}
 	}
 	if err := ValidateMessaging(c); err != nil {
@@ -92,7 +93,7 @@ func ValidateMessaging(c *MessagingConfig) error {
 	targets := c.envTargets()
 	var missing []string
 	for _, fs := range spec.Messaging {
-		if fs.Required && string(*targets[fs.Env]) == "" {
+		if fs.Required && targets[fs.Env].get() == "" {
 			missing = append(missing, fs.Env)
 		}
 	}

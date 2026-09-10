@@ -47,23 +47,25 @@ const (
 	defaultAsteriskPort   = "5038"
 )
 
-// envTargets maps every telephony env var to its struct field. Kept in
-// lockstep with the provider specs by the coverage tests.
-func (c *TelephonyConfig) envTargets() map[string]*string {
-	return map[string]*string{
-		"ORVEXA_TWILIO_ACCOUNT_SID":    &c.TwilioAccountSID,
-		"ORVEXA_TWILIO_AUTH_TOKEN":     &c.TwilioAuthToken,
-		"ORVEXA_TWILIO_FROM_NUMBER":    &c.TwilioFromNumber,
-		"ORVEXA_AT_USERNAME":           &c.ATUsername,
-		"ORVEXA_AT_API_KEY":            &c.ATAPIKey,
-		"ORVEXA_AT_VOICE_PRODUCT_CODE": &c.ATVoiceProductCode,
-		"ORVEXA_FREESWITCH_HOST":       &c.FreeSwitchHost,
-		"ORVEXA_FREESWITCH_PORT":       &c.FreeSwitchPort,
-		"ORVEXA_FREESWITCH_PASSWORD":   &c.FreeSwitchPassword,
-		"ORVEXA_ASTERISK_HOST":         &c.AsteriskHost,
-		"ORVEXA_ASTERISK_PORT":         &c.AsteriskPort,
-		"ORVEXA_ASTERISK_USERNAME":     &c.AsteriskUsername,
-		"ORVEXA_ASTERISK_SECRET":       &c.AsteriskSecret,
+// envTargets maps every telephony env var to its struct field. Credential
+// fields stay typed Secret; only the non-credential host/port endpoints are
+// addressed as plain strings. Kept in lockstep with the provider specs by the
+// coverage tests.
+func (c *TelephonyConfig) envTargets() map[string]fieldRef {
+	return map[string]fieldRef{
+		"ORVEXA_TWILIO_ACCOUNT_SID":    secretRef(&c.TwilioAccountSID),
+		"ORVEXA_TWILIO_AUTH_TOKEN":     secretRef(&c.TwilioAuthToken),
+		"ORVEXA_TWILIO_FROM_NUMBER":    secretRef(&c.TwilioFromNumber),
+		"ORVEXA_AT_USERNAME":           secretRef(&c.ATUsername),
+		"ORVEXA_AT_API_KEY":            secretRef(&c.ATAPIKey),
+		"ORVEXA_AT_VOICE_PRODUCT_CODE": secretRef(&c.ATVoiceProductCode),
+		"ORVEXA_FREESWITCH_HOST":       plainRef(&c.FreeSwitchHost),
+		"ORVEXA_FREESWITCH_PORT":       plainRef(&c.FreeSwitchPort),
+		"ORVEXA_FREESWITCH_PASSWORD":   secretRef(&c.FreeSwitchPassword),
+		"ORVEXA_ASTERISK_HOST":         plainRef(&c.AsteriskHost),
+		"ORVEXA_ASTERISK_PORT":         plainRef(&c.AsteriskPort),
+		"ORVEXA_ASTERISK_USERNAME":     secretRef(&c.AsteriskUsername),
+		"ORVEXA_ASTERISK_SECRET":       secretRef(&c.AsteriskSecret),
 	}
 }
 
@@ -94,7 +96,7 @@ func telephonyFromLookup(get envGetter) (*TelephonyConfig, error) {
 	targets := c.envTargets()
 	for _, fs := range spec.Telephony {
 		if v := strings.TrimSpace(get(fs.Env)); v != "" {
-			*targets[fs.Env] = v
+			targets[fs.Env].set(v)
 		}
 	}
 	applyTelephonyDefaults(c)
@@ -123,7 +125,7 @@ func ValidateTelephony(c *TelephonyConfig) error {
 	targets := c.envTargets()
 	var missing []string
 	for _, fs := range spec.Telephony {
-		if fs.Required && string(*targets[fs.Env]) == "" {
+		if fs.Required && targets[fs.Env].get() == "" {
 			missing = append(missing, fs.Env)
 		}
 	}

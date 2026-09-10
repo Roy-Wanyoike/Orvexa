@@ -2,7 +2,6 @@ package registry
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -275,8 +274,9 @@ func assertStringSetEqual(t *testing.T, what string, got, want []string) {
 }
 
 // TestEachSpecEnvFeedsDistinctField parses a config with every spec env var
-// set and asserts each one landed in a distinct, non-empty struct field —
-// i.e. the parser and the registry table cannot drift apart silently.
+// set to a value derived from the variable's own name and asserts each one
+// landed in its own, non-empty struct field — i.e. the parser and the
+// registry table cannot drift apart or alias one field silently.
 func TestEachSpecEnvFeedsDistinctField(t *testing.T) {
 	for _, name := range Names() {
 		spec, _ := Lookup(name)
@@ -310,24 +310,16 @@ func TestEachSpecEnvFeedsDistinctField(t *testing.T) {
 	}
 }
 
-func assertAllTargetsFed(t *testing.T, targets map[string]*string, fields []FieldSpec) {
+func assertAllTargetsFed(t *testing.T, targets map[string]fieldRef, fields []FieldSpec) {
 	t.Helper()
-	unique := map[string]bool{}
 	for _, fs := range fields {
-		p := targets[fs.Env]
-		if p == nil {
+		ref, ok := targets[fs.Env]
+		if !ok {
 			t.Fatalf("env %s has no target", fs.Env)
 		}
-		if string(*p) == "" {
-			t.Fatalf("env %s was set but its field stayed empty", fs.Env)
+		want := "fake-" + strings.ToLower(strings.TrimPrefix(fs.Env, "ORVEXA_"))
+		if ref.get() != want {
+			t.Fatalf("env %s did not land in its own field (aliased or dropped write)", fs.Env)
 		}
-		unique[formatPointer(p)] = true
 	}
-	if len(unique) != len(fields) {
-		t.Fatalf("two env vars share one struct field: %d fields, %d distinct targets", len(fields), len(unique))
-	}
-}
-
-func formatPointer(p *string) string {
-	return fmt.Sprintf("%p", p)
 }
