@@ -23,12 +23,12 @@ import (
 type Status string
 
 const (
-	StatusOpen             Status = "open"
-	StatusInProgress       Status = "in_progress"
-	StatusPendingCustomer  Status = "pending_customer"
-	StatusResolved         Status = "resolved"
-	StatusClosed           Status = "closed"
-	StatusCanceled         Status = "canceled"
+	StatusOpen            Status = "open"
+	StatusInProgress      Status = "in_progress"
+	StatusPendingCustomer Status = "pending_customer"
+	StatusResolved        Status = "resolved"
+	StatusClosed          Status = "closed"
+	StatusCanceled        Status = "canceled"
 )
 
 // transitions encodes the guarded lifecycle.
@@ -53,19 +53,19 @@ func CanTransition(from, to Status) bool {
 
 // Case is the aggregate root.
 type Case struct {
-	ID              string         `json:"id"`
-	TenantID        string         `json:"tenant_id"`
-	CustomerID      string         `json:"customer_id"`
-	Ref             string         `json:"ref"`
-	Subject         string         `json:"subject"`
-	Description     string         `json:"description,omitempty"`
-	Status          Status         `json:"status"`
-	Priority        string         `json:"priority"`
-	AssignedAgentID string         `json:"assigned_agent_id,omitempty"`
-	ResolvedAt      *time.Time     `json:"resolved_at,omitempty"`
-	ClosedAt        *time.Time     `json:"closed_at,omitempty"`
-	CreatedAt       time.Time      `json:"created_at"`
-	UpdatedAt       time.Time      `json:"updated_at"`
+	ID              string     `json:"id"`
+	TenantID        string     `json:"tenant_id"`
+	CustomerID      string     `json:"customer_id"`
+	Ref             string     `json:"ref"`
+	Subject         string     `json:"subject"`
+	Description     string     `json:"description,omitempty"`
+	Status          Status     `json:"status"`
+	Priority        string     `json:"priority"`
+	AssignedAgentID string     `json:"assigned_agent_id,omitempty"`
+	ResolvedAt      *time.Time `json:"resolved_at,omitempty"`
+	ClosedAt        *time.Time `json:"closed_at,omitempty"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
 }
 
 // Note is an internal or external case comment.

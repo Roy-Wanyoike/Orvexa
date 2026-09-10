@@ -139,9 +139,9 @@ func (d *Dispatcher) releaseForRetry(ctx context.Context, batch ClaimedBatch) er
 
 // Metrics returns dispatcher health numbers for readiness endpoints.
 type Metrics struct {
-	Pending   int64
+	Pending    int64
 	Publishing int64
-	Failed    int64
+	Failed     int64
 }
 
 func (d *Dispatcher) Metrics(ctx context.Context) (Metrics, error) {

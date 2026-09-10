@@ -17,8 +17,8 @@ type PresenceStore struct {
 	pool *pgxpool.Pool
 	ttl  time.Duration
 
-	mu      sync.Mutex
-	cache   map[string]cacheEntry // tenantID → snapshot
+	mu    sync.Mutex
+	cache map[string]cacheEntry // tenantID → snapshot
 }
 
 type cacheEntry struct {

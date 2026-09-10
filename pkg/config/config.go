@@ -40,11 +40,11 @@ type Config struct {
 
 	BootstrapAPIKey string
 
-	AIProvider     AIProvider
-	AILLMBaseURL   string
-	AILLMAPIKey    string
-	AIMaxTokens    int
-	AITimeout      time.Duration
+	AIProvider   AIProvider
+	AILLMBaseURL string
+	AILLMAPIKey  string
+	AIMaxTokens  int
+	AITimeout    time.Duration
 
 	CommsProvider     string
 	WebhookHMACSecret string

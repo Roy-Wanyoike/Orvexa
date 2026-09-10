@@ -9,36 +9,38 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/Roy-Wanyoike/orvexa/internal/agents"
+	"github.com/Roy-Wanyoike/orvexa/internal/ai"
 	"github.com/Roy-Wanyoike/orvexa/internal/cases"
 	"github.com/Roy-Wanyoike/orvexa/internal/comms"
 	"github.com/Roy-Wanyoike/orvexa/internal/conversations"
 	"github.com/Roy-Wanyoike/orvexa/internal/customers"
 	"github.com/Roy-Wanyoike/orvexa/internal/interactions"
+	"github.com/Roy-Wanyoike/orvexa/internal/messaging"
 	"github.com/Roy-Wanyoike/orvexa/internal/platform/httpx"
 	"github.com/Roy-Wanyoike/orvexa/internal/platform/outbox"
 	"github.com/Roy-Wanyoike/orvexa/internal/queues"
 	"github.com/Roy-Wanyoike/orvexa/internal/routing"
+	"github.com/Roy-Wanyoike/orvexa/internal/telephony"
 	"github.com/Roy-Wanyoike/orvexa/internal/tenancy"
 	"github.com/Roy-Wanyoike/orvexa/internal/webhooks"
-	"github.com/Roy-Wanyoike/orvexa/internal/messaging"
-	"github.com/Roy-Wanyoike/orvexa/internal/telephony"
 )
 
 // DomainDeps bundles the services the v1 API exposes.
 type DomainDeps struct {
-	Customers     *customers.Service
-	Conversations *conversations.Service
-	Interactions  *interactions.Service
-	Agents        *agents.Service
-	Queues        *queues.Service
-	Cases         *cases.Service
-	Tenancy       *tenancy.Service
-	Writer        *outbox.Writer
-	Webhooks      *webhooks.Gateway
+	Customers      *customers.Service
+	Conversations  *conversations.Service
+	Interactions   *interactions.Service
+	Agents         *agents.Service
+	Queues         *queues.Service
+	Cases          *cases.Service
+	Tenancy        *tenancy.Service
+	Writer         *outbox.Writer
+	Webhooks       *webhooks.Gateway
 	CommsProcessor *comms.Processor
-	Calls         *telephony.Service
-	Messages      *messaging.Service
-	Routing       *routing.Service
+	Calls          *telephony.Service
+	Messages       *messaging.Service
+	Routing        *routing.Service
+	AI             *ai.Runtime
 }
 
 // MountV1 assembles the /api/v1 route tree.
@@ -74,6 +76,7 @@ func MountV1(r chi.Router, deps DomainDeps, limiter *httpx.RateLimit, webhookLim
 			MountCalls(authed, deps.Calls)
 			MountMessages(authed, deps.Messages)
 			MountRouting(authed, deps.Routing)
+			MountAI(authed, deps.AI)
 		})
 	})
 }

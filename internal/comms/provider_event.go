@@ -24,8 +24,8 @@ type IngestFunc func(ctx context.Context, provider string, body []byte, signatur
 // ProviderEvent is the provider→platform webhook payload contract. Real
 // carrier adapters translate their native payloads into this shape.
 type ProviderEvent struct {
-	Event         string `json:"event"`            // call.ringing|call.connected|call.completed|call.failed|message.delivered|message.read
-	InteractionID string `json:"interaction_id"`   // platform interaction id
+	Event         string `json:"event"`          // call.ringing|call.connected|call.completed|call.failed|message.delivered|message.read
+	InteractionID string `json:"interaction_id"` // platform interaction id
 	TenantID      string `json:"tenant_id"`
 	Timestamp     string `json:"timestamp"`        // RFC3339, provider-side occurrence
 	Detail        string `json:"detail,omitempty"` // e.g. hangup cause

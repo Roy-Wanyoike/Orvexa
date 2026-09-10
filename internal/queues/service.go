@@ -18,17 +18,17 @@ import (
 
 // Queue is a routing destination with its serving policy.
 type Queue struct {
-	ID           string          `json:"id"`
-	TenantID     string          `json:"tenant_id"`
-	Name         string          `json:"name"`
-	Description  string          `json:"description,omitempty"`
-	Priority     int             `json:"priority"`
+	ID            string         `json:"id"`
+	TenantID      string         `json:"tenant_id"`
+	Name          string         `json:"name"`
+	Description   string         `json:"description,omitempty"`
+	Priority      int            `json:"priority"`
 	BusinessHours map[string]any `json:"business_hours,omitempty"`
-	SLASeconds   int             `json:"sla_seconds"`
-	Status       string          `json:"status"`
-	Skills       []string        `json:"skills"`
-	CreatedAt    time.Time       `json:"created_at"`
-	UpdatedAt    time.Time       `json:"updated_at"`
+	SLASeconds    int            `json:"sla_seconds"`
+	Status        string         `json:"status"`
+	Skills        []string       `json:"skills"`
+	CreatedAt     time.Time      `json:"created_at"`
+	UpdatedAt     time.Time      `json:"updated_at"`
 }
 
 type CreateInput struct {

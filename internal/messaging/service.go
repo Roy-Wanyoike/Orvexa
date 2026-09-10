@@ -19,11 +19,11 @@ func NewService(interactions *interactions.Service, provider MessagingProvider) 
 
 // SendInput is the validated send request.
 type SendInput struct {
-	CustomerID string `json:"customer_id"`
-	Channel    string `json:"channel"`
-	From       string `json:"from"`
-	To         string `json:"to"`
-	Body       string `json:"body"`
+	CustomerID string   `json:"customer_id"`
+	Channel    string   `json:"channel"`
+	From       string   `json:"from"`
+	To         string   `json:"to"`
+	Body       string   `json:"body"`
 	MediaURLs  []string `json:"media_urls"`
 }
 
