@@ -2,6 +2,8 @@ package twilio
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
@@ -273,4 +275,13 @@ func sleepSeam(a *Adapter) *sleepRecorder {
 	rec := &sleepRecorder{}
 	a.sleep = rec.record
 	return rec
+}
+
+// testSigner is a deterministic HMAC stand-in over a fixed, obviously-fake
+// key. The conformance kit only requires signatures to be present and stable
+// (HMAC verification lives in the webhook gateway), so no credential
+// material belongs in adapter tests.
+func testSigner(body []byte) string {
+	sum := sha256.Sum256(append([]byte("orvexa-twilio-test-key\x00"), body...))
+	return "sha256=" + hex.EncodeToString(sum[:16])
 }
