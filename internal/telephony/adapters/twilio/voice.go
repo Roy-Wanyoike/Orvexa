@@ -150,10 +150,10 @@ func (a *Adapter) PlaceCall(ctx context.Context, cmd telephony.CallCommand) erro
 	}
 
 	form := url.Values{
-		"To":     {to},
-		"From":   {from},
-		"Url":    {twimlURL},
-		"Method": {http.MethodPost},
+		"To":                   {to},
+		"From":                 {from},
+		"Url":                  {twimlURL},
+		"Method":               {http.MethodPost},
 		"StatusCallback":       {callbackURL(a.cfg.CallbackBaseURL, cmd.InteractionID, tenantID)},
 		"StatusCallbackMethod": {http.MethodPost},
 		"StatusCallbackEvent":  {"ringing", "answered", "completed"},
