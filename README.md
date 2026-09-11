@@ -72,7 +72,7 @@ Core domain model: **Customer → Conversation → Interaction → Case → Work
 
 | Claim | Evidence |
 |---|---|
-| 32 test packages green under the race detector; build, vet, gofmt, migration and boot gates pass | verified per [ADR-0003](docs/adr/0003-verification-without-hosted-actions.md), recorded in [qa/QA_REPORT.md](qa/QA_REPORT.md); re-run on this PR |
+| 35 test packages green under the race detector; build, vet, gofmt, migration and boot gates pass | verified per [ADR-0003](docs/adr/0003-verification-without-hosted-actions.md), recorded in [qa/QA_REPORT.md](qa/QA_REPORT.md); re-run on this PR |
 | Provider conformance kit — every carrier adapter must pass the same lifecycle contract, audited by negative controls | [internal/comms/conformance/README.md](internal/comms/conformance/README.md) |
 | Transactional outbox: state + events in one SQL transaction, lease-based dispatcher, at-least-once with idempotent consumers, failures parked — never deleted | [internal/platform/outbox](internal/platform/outbox), [ADR-0004](docs/adr/0004-event-delivery-and-outbox.md) |
 | Tool gateway: the only path from AI to side-effects — allowlists, schemas, rate windows, audited refusals; AI holds no credentials | [internal/tools](internal/tools), [architecture § AI boundary](docs/architecture.md#ai-boundary) |
@@ -187,7 +187,7 @@ Next, per umbrella [#10](https://github.com/Roy-Wanyoike/Orvexa/issues/10): wire
 
 ## Honest limitations
 
-From [qa/QA_REPORT.md §5](qa/QA_REPORT.md) and this PR's verification: the default profile runs the in-process bus and simulator carrier (production drivers are swap points, not yet wired into `cmd`) · no hosted CI — the local matrix is the gate ([ADR-0003](docs/adr/0003-verification-without-hosted-actions.md)) · tenant bootstrap is SQL (no admin API yet) · single-region, single-Postgres posture · [`scripts/e2e-demo.sh`](scripts/e2e-demo.sh) needs a payload refresh to match the strict processor vocabulary ([#89](https://github.com/Roy-Wanyoike/Orvexa/issues/89)) and the second outbound call per tenant is blocked by an empty-`provider_ref` dedupe collision ([#90](https://github.com/Roy-Wanyoike/Orvexa/issues/90)) — both verified while validating the quickstart above, which stays inside the proven path.
+From [qa/QA_REPORT.md §5](qa/QA_REPORT.md) and the full-matrix verification ([evidence pack](qa/evidence/2026-09-11/INDEX.md)): the default profile runs the in-process bus and simulator carrier — production drivers are swap points and the NATS/Redis `cmd` wiring is tracked as [issue #113](https://github.com/Roy-Wanyoike/Orvexa/issues/113) · no hosted CI — the local matrix is the gate ([ADR-0003](docs/adr/0003-verification-without-hosted-actions.md)) · tenant bootstrap is SQL (no admin API yet) · single-region, single-Postgres posture · Temporal adoption is build-tag-gated by design ([ADR-0009](docs/adr/0009-temporal-driver.md)) · performance baselines are loopback floors, not production forecasts ([docs/slo.md](docs/slo.md)). The earlier quickstart caveats (e2e-demo payload drift, second-outbound-call collision) were fixed and re-proven — [e2e-demo now passes 12/12](qa/evidence/2026-09-11/09-e2e-demo.txt).
 
 ## License
 
