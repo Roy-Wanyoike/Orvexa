@@ -232,5 +232,54 @@ clean · `go build ./...` clean · `make lint-todos` clean · `go test -race
 **PR:** "security: independent sweep — secret scan, govulncheck, headers, rate-limit
 matrix (#39)" — Closes #39.
 
-**Risks / follow-ups:** verdict is **BLOCKED** on the pgx bump (#81) — land it, re-run
-govulncheck, flip to PUBLIC-READY; accepted residuals documented in posture §7 (R1–R7).
+**PR:** "feat(infra): Redis presence cache + distributed rate-limit drivers (#37)" — Closes #37.
+
+**Risks / follow-ups:** glue wave must call `NewPresenceCacheFromEnv` / `NewRateLimitFromEnv`
+in `cmd/api` + `httpserver` wiring (the swap points exist and are proven; until then the env var
+affects nothing at boot — by design, zero default drift); limiter `scope` values must be chosen
+at the mount sites (`auth` vs `webhooks`) with `FailClosed=true` on the auth surface; fixed
+window permits up to 2× limit across a bucket boundary (documented; a ZSET sliding window is the
+follow-up if that is unacceptable); no Redis Cluster/pub-sub scope by issue constraint.
+
+---
+
+## Wave D2d — [O-31] issue #40: tenancy & authorization matrix (cross-tenant isolation evidence)
+
+**Owner:** Agent D2 (QA engineer, security-adjacent) · **Branch:** `test/authz-matrix` ·
+**Predecessor state:** commit 97a3fca (harness booting real stack) + 3 dirty files + untracked
+MATRIX.md from two timed-out predecessor sessions; salvaged and pushed.
+
+**Delivered:**
+- Salvage (51eb6a6): envelope-aware `jsonField` (unwraps httpx `{data,meta}` before field
+  lookup), `to_regclass(...)::text` table probe (pgx 5.7.2 cannot scan OID 2205), interaction
+  seeds carrying distinct `ProviderRef` (platform dedupes `(tenant_id, provider, provider_ref)`;
+  ref-less binds `''` — defect D7), R27 captures the REAL placed-call id (`telephony.Rec` wire
+  key `"ID"`) so R28 holds a simulator-registered leg while the D9 probe uses an unplaced leg;
+  `probeForeignList` (D8 ratchet: needle scan + 200-empty-vs-404), `probeDefectMasked`
+  (secondary-defect masking: D7's ref-less-create 409 masks D1 on calls/messages), DEF-1 rows
+  ratcheting D7, sorted defect registry in the report.
+- Matrix run (evidence commit in MATRIX.md): devstack PG (port 55439, migrations applied) +
+  real API process (`go run ./cmd/api`, simulator comms, inproc bus, API-key-only auth, search
+  degraded) + two tenants/keys minted per the documented bootstrap path (SQL, hashed keys).
+  `go test -race -tags=authz ./tests/authz/` → 153 probes, 0 hard failures, 14 DEFECT rows
+  (D1–D9 ratchets recorded, never fixed here), 2 PASS(degraded), 2 Conditional.
+- Defects filed (failures are NOT fixed in this package): D1→#92, D2→#93, D3→#94, D4→#95,
+  D5→#96, D6→#97, D7→#90 (pre-existing O-47, same root cause), D8→#98, D9→#99; registry linked
+  and MATRIX.md regenerated (5894802).
+- Worklog: resolved the committed `<<<<<<< HEAD / >>>>>>> origin/main` conflict block in this
+  file (both predecessor entries kept verbatim), appended this entry.
+
+**Verification (CI-equivalent local full matrix):** `gofmt -l .` empty · `go vet ./...` clean ·
+`go build ./...` clean · `go test -race ./...` exit 0 (31 packages ok, 0 FAIL) ·
+`go test -race -tags=authz ./tests/authz/` PASS (153 probes, 0 hard failures) ·
+`make lint-todos` clean.
+
+**PR:** "test(authz): tenancy & authorization matrix with cross-tenant evidence (#40)" —
+Closes #40.
+
+**Risks / follow-ups:** six isolation defects remain open by design (D1–D6 filed as P0 type/bug,
+owners assigned per domain; the ratchet rows auto-re-verify as PASS-SECURED once fixed);
+identity-plane routes are Conditional (fail-closed 404) until OIDC is provisioned; harness still
+boots the API via `go run` (worked cleanly this run — 0.72s suite — but an in-process httptest
+assembly is the documented follow-up if it ever proves flaky in CI); search routes are
+PASS(degraded) until OpenSearch lands in devstack.
