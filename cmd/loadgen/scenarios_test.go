@@ -170,7 +170,7 @@ func TestBodyBuildersUniqueness(t *testing.T) {
 	}
 	// The measured stream must never collide with the seed range.
 	for p := range phones {
-		if p <= "+254700000064" && p >= "+254700000000" {
+		if strings.HasPrefix(p, "+25470000") {
 			t.Fatalf("measured phone %s collides with seed range", p)
 		}
 	}

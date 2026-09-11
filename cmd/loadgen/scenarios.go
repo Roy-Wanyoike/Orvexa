@@ -169,10 +169,13 @@ func seed(ctx context.Context, c *Client, secret string, names []string, pool in
 
 	if wantCustomers {
 		// The first customer's response yields the tenant id the webhook
-		// scenario must stamp into ProviderEvent payloads.
+		// scenario must stamp into ProviderEvent payloads. Phone numbering:
+		// seed 0 owns +254700000000, the pool continues at ...000001, and the
+		// measured customer-create counter starts at +254701000000 — the three
+		// ranges never overlap (identifier uniqueness is per tenant).
 		body, _ := json.Marshal(map[string]any{
 			"display_name": "Seed 0",
-			"identifiers":  []map[string]any{{"type": "phone", "value": "+254700000001", "is_primary": true}},
+			"identifiers":  []map[string]any{{"type": "phone", "value": "+254700000000", "is_primary": true}},
 		})
 		res, payload := c.PostRead(ctx, "/api/v1/customers", body)
 		data, err := respData(res, payload, http.StatusCreated)
@@ -182,7 +185,7 @@ func seed(ctx context.Context, c *Client, secret string, names []string, pool in
 		w.tenantID = fieldCI(data, "tenant_id", "TenantID")
 		w.mu.Lock()
 		w.customers = append(w.customers, fieldCI(data, "id", "ID"))
-		w.phones = append(w.phones, "+254700000001")
+		w.phones = append(w.phones, "+254700000000")
 		w.mu.Unlock()
 
 		for i := 1; i < pool; i++ {
