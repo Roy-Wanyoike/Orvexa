@@ -1,0 +1,20 @@
+### Orvexa API v1 — journey step 14: conversation search (read model)
+### Full-text search over the event-sourced OpenSearch projection
+### (orvexa-conversations index). Eventually consistent with PostgreSQL.
+###
+### Degradation principle — a search outage never blocks the hot path:
+###   - backend unset    → 503 {error:{code:"search.not_configured"}}
+###   - backend down/slow → 503 {error:{code:"search.unavailable"}}
+###
+### The tenant filter is applied SERVER-SIDE from the authenticated API key —
+### there is no tenant parameter, a client cannot express cross-tenant search.
+
+@ORVEXA_URL = {{$processEnv ORVEXA_URL}}
+@ORVEXA_KEY = {{$processEnv ORVEXA_KEY}}
+
+### Search → 200 {total, limit, hits[]} or typed 503 degradation
+# q: simple query string over projected search text, customer and channel
+#    (1–256 chars → else 422); limit server-capped at 50 (default 25)
+# @name searchConversations
+GET {{ORVEXA_URL}}/api/v1/search/conversations?q=help&limit=25
+X-API-Key: {{ORVEXA_KEY}}

@@ -66,6 +66,20 @@ func (s *Service) Create(ctx context.Context, tenantID string, in CreateInput) (
 	if in.Source == "" || in.Destination == "" {
 		return nil, apperrors.Invalid("interaction.endpoints_required", "source and destination are required")
 	}
+	// The referenced customer must belong to the caller's tenant. Every
+	// interaction-plane create (POST /interactions, /calls, /messages) funnels
+	// through here: without this scope check a foreign-tenant customer_id was
+	// accepted (201) and anchored tenant rows - conversation auto-open below
+	// and the customer FK - to a customer the caller cannot see (#92, MAT-D1).
+	var customerOwned bool
+	if err := s.pool.QueryRow(ctx, `
+			SELECT EXISTS (SELECT 1 FROM customers WHERE id = $1 AND tenant_id = $2)`,
+		in.CustomerID, tenantID).Scan(&customerOwned); err != nil {
+		return nil, apperrors.Internal("db.read_failed", "read failed").WithCause(err)
+	}
+	if !customerOwned {
+		return nil, apperrors.NotFound("customer.not_found", "customer not found")
+	}
 	if in.IdempotencyKey == "" && in.ProviderRef != "" {
 		in.IdempotencyKey = idempotency.Derive(in.Provider, in.ProviderRef)
 	}

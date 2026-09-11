@@ -1,0 +1,35 @@
+### Orvexa API v1 — journey step 01: health & discovery
+### Part of api/examples/ (issue #47). Run the numbered files in order with the
+### VS Code REST Client (ms-vscode.restclient) or JetBrains HTTP client.
+###
+### Variables: ORVEXA_URL/KEY/SECRET come from the environment — never paste
+### real credentials into these files. Export them before sending:
+###   export ORVEXA_URL=http://localhost:8080 ORVEXA_KEY=<raw key> ORVEXA_SECRET=<webhook hmac secret>
+### Local stack: see docs/devstack.md and the first-tenant bootstrap in
+### docs/runbooks/operations.md (organizations/tenants/api_keys SQL).
+
+@ORVEXA_URL = {{$processEnv ORVEXA_URL}}
+@ORVEXA_KEY = {{$processEnv ORVEXA_KEY}}
+
+### Liveness (public, always 200 while serving)
+# @name liveness
+GET {{ORVEXA_URL}}/healthz
+
+###
+
+### Readiness — the journey gate (503 `degraded` when a component is down)
+# @name readiness
+GET {{ORVEXA_URL}}/readyz
+
+###
+
+### Resource index / discovery (envelope data = {resources[]})
+# @name discovery
+GET {{ORVEXA_URL}}/api/v1/
+X-API-Key: {{ORVEXA_KEY}}
+
+###
+
+### Auth is enforced (401 auth.missing_key without a key — fail-closed)
+# @name noKeyRejected
+GET {{ORVEXA_URL}}/api/v1/customers

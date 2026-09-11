@@ -124,6 +124,20 @@ func (s *Service) Open(ctx context.Context, tenantID string, in CreateInput) (*C
 		return nil, apperrors.Invalid("case.priority_invalid", "priority must be low|normal|high|urgent")
 	}
 
+	// The referenced customer must belong to the caller's tenant: the
+	// cases.customer_id FK alone validated only global existence, so a
+	// foreign-tenant customer_id was accepted (201) — and the 201-vs-404
+	// difference doubled as an existence oracle for foreign ids (#93, MAT-D2).
+	var customerOwned bool
+	if err := s.pool.QueryRow(ctx, `
+			SELECT EXISTS (SELECT 1 FROM customers WHERE id = $1 AND tenant_id = $2)`,
+		in.CustomerID, tenantID).Scan(&customerOwned); err != nil {
+		return nil, apperrors.Internal("db.read_failed", "read failed").WithCause(err)
+	}
+	if !customerOwned {
+		return nil, apperrors.NotFound("customer.not_found", "customer not found")
+	}
+
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return nil, apperrors.Internal("db.tx_failed", "write failed").WithCause(err)
@@ -240,6 +254,19 @@ func (s *Service) AddNote(ctx context.Context, tenantID, id, authorType, authorI
 	if body == "" || len(body) > 8000 {
 		return nil, apperrors.Invalid("case.body_invalid", "note body must be 1-8000 chars")
 	}
+	// The note must land on a case owned by the caller's tenant: the
+	// case_notes insert validated only the case_id FK (global existence), so
+	// a tenant-B key could write arbitrary content into a tenant-A case
+	// timeline — a direct cross-tenant WRITE (#94, MAT-D3).
+	var caseOwned bool
+	if err := s.pool.QueryRow(ctx, `
+			SELECT EXISTS (SELECT 1 FROM cases WHERE id = $1 AND tenant_id = $2)`,
+		id, tenantID).Scan(&caseOwned); err != nil {
+		return nil, apperrors.Internal("db.read_failed", "read failed").WithCause(err)
+	}
+	if !caseOwned {
+		return nil, apperrors.NotFound("case.not_found", "case not found")
+	}
 	n := &Note{
 		ID: uuid.NewString(), CaseID: id, AuthorType: authorType, AuthorID: authorID,
 		Body: body, Internal: internal, CreatedAt: time.Now().UTC(),
@@ -263,10 +290,15 @@ func (s *Service) AddNote(ctx context.Context, tenantID, id, authorType, authorI
 
 // LinkInteraction associates an interaction with a case.
 func (s *Service) LinkInteraction(ctx context.Context, tenantID, caseID, interactionID string) error {
+	// Both sides of the link must belong to the caller's tenant: the
+	// interaction was already scoped, but the CASE was not — a tenant-B key
+	// could link its own interaction into a tenant-A case (204), planting
+	// cross-tenant content in A's case view (#95, MAT-D4).
 	res, err := s.pool.Exec(ctx, `
 		INSERT INTO case_interactions (case_id, interaction_id)
 		SELECT $1, i.id FROM interactions i
 		WHERE i.id = $2 AND i.tenant_id = $3
+			AND EXISTS (SELECT 1 FROM cases c WHERE c.id = $1 AND c.tenant_id = $3)
 		ON CONFLICT DO NOTHING`, caseID, interactionID, tenantID)
 	if err != nil {
 		return apperrors.Internal("db.write_failed", "write failed").WithCause(err)
