@@ -1,0 +1,18 @@
+### Orvexa API v1 — journey step 13: analytics
+### Facts aggregation over a bounded window (max 30 days — wider → 422).
+### PostgreSQL facts sink by default; ClickHouse when ORVEXA_CLICKHOUSE_URL
+### is set (see docs/devstack.md § ClickHouse).
+
+@ORVEXA_URL = {{$processEnv ORVEXA_URL}}
+@ORVEXA_KEY = {{$processEnv ORVEXA_KEY}}
+
+### Summary → 200 {total_interactions, interactions_by_channel, …}
+# @name analyticsSummary
+GET {{ORVEXA_URL}}/api/v1/analytics/summary
+X-API-Key: {{ORVEXA_KEY}}
+
+###
+
+### (Variant) bounded window:
+# GET {{ORVEXA_URL}}/api/v1/analytics/summary?from=2026-09-01T00:00:00Z&to=2026-09-10T00:00:00Z
+# X-API-Key: {{ORVEXA_KEY}}

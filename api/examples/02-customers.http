@@ -1,0 +1,52 @@
+### Orvexa API v1 — journey step 02: customer identity
+### Create a customer with channel identifiers, resolve an identifier back to
+### the same customer (normalization: phone → E.164 digits, email lowercase),
+### list + get. The tenant derives from the API key — never from the body.
+
+@ORVEXA_URL = {{$processEnv ORVEXA_URL}}
+@ORVEXA_KEY = {{$processEnv ORVEXA_KEY}}
+
+### Create a customer with two channel identities → 201
+# @name createCustomer
+POST {{ORVEXA_URL}}/api/v1/customers
+X-API-Key: {{ORVEXA_KEY}}
+Content-Type: application/json
+
+{
+  "display_name": "Jane Wanjiku",
+  "language": "en",
+  "timezone": "Africa/Nairobi",
+  "identifiers": [
+    { "type": "phone", "value": "+254 712 345 678" },
+    { "type": "whatsapp", "value": "+254712345678", "is_primary": true }
+  ],
+  "tags": ["pilot"]
+}
+
+###
+
+### Resolve by the normalized phone digits → 200, same customer id
+# (254712345678 == +254712345678 == +254 712 345 678 — one identity, no forks)
+# @name resolvePhone
+POST {{ORVEXA_URL}}/api/v1/customers/resolve
+X-API-Key: {{ORVEXA_KEY}}
+Content-Type: application/json
+
+{
+  "type": "phone",
+  "value": "254712345678"
+}
+
+###
+
+### List customers (cursor pagination; limit ≤ 100)
+# @name listCustomers
+GET {{ORVEXA_URL}}/api/v1/customers?limit=25
+X-API-Key: {{ORVEXA_KEY}}
+
+###
+
+### Get the customer created above
+# @name getCustomer
+GET {{ORVEXA_URL}}/api/v1/customers/{{createCustomer.response.body.$.data.id}}
+X-API-Key: {{ORVEXA_KEY}}

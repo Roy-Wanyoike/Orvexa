@@ -1,0 +1,82 @@
+### Orvexa API v1 — journey step 03: agents, presence, queues
+### Register the human agent (skills matter for routing), put the agent
+### available, create the billing queue. Later steps route/assign to these.
+
+@ORVEXA_URL = {{$processEnv ORVEXA_URL}}
+@ORVEXA_KEY = {{$processEnv ORVEXA_KEY}}
+
+### Register an agent → 201 (captures {{registerAgent...id}})
+# @name registerAgent
+POST {{ORVEXA_URL}}/api/v1/agents
+X-API-Key: {{ORVEXA_KEY}}
+Content-Type: application/json
+
+{
+  "external_identity": "amara@acme",
+  "display_name": "Amara",
+  "language": "sw",
+  "skills": [{ "skill": "billing", "level": 4 }]
+}
+
+###
+
+### Set presence → 200 (available | busy | wrapup | offline)
+# @name setPresence
+PUT {{ORVEXA_URL}}/api/v1/agents/{{registerAgent.response.body.$.data.id}}/presence
+X-API-Key: {{ORVEXA_KEY}}
+Content-Type: application/json
+
+{
+  "status": "available"
+}
+
+###
+
+### Read presence → 200
+# @name getPresence
+GET {{ORVEXA_URL}}/api/v1/agents/{{registerAgent.response.body.$.data.id}}/presence
+X-API-Key: {{ORVEXA_KEY}}
+
+###
+
+### List agents → 200
+# @name listAgents
+GET {{ORVEXA_URL}}/api/v1/agents
+X-API-Key: {{ORVEXA_KEY}}
+
+###
+
+### Get one agent → 200
+# @name getAgent
+GET {{ORVEXA_URL}}/api/v1/agents/{{registerAgent.response.body.$.data.id}}
+X-API-Key: {{ORVEXA_KEY}}
+
+###
+
+### Create a queue → 201 (priority 1–10, sla_seconds 5–3600)
+# @name createQueue
+POST {{ORVEXA_URL}}/api/v1/queues
+X-API-Key: {{ORVEXA_KEY}}
+Content-Type: application/json
+
+{
+  "name": "Billing Tier 1",
+  "description": "First-line billing support",
+  "priority": 5,
+  "sla_seconds": 60,
+  "skills": ["billing"]
+}
+
+###
+
+### List queues → 200
+# @name listQueues
+GET {{ORVEXA_URL}}/api/v1/queues
+X-API-Key: {{ORVEXA_KEY}}
+
+###
+
+### Get one queue → 200
+# @name getQueue
+GET {{ORVEXA_URL}}/api/v1/queues/{{createQueue.response.body.$.data.id}}
+X-API-Key: {{ORVEXA_KEY}}
