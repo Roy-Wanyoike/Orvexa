@@ -181,7 +181,7 @@ paths:
   /calls:
     post:
       summary: Place an outbound call (creates a voice interaction; provider lifecycle flows via signed webhooks)
-      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [customer_id, to], properties: { customer_id: { type: string }, from: { type: string }, to: { type: string }, agent_id: { type: string }, queue_id: { type: string }, options: { type: object, additionalProperties: true } } } } } }
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [customer_id, to], properties: { customer_id: { type: string }, from: { type: string, default: orvexa-voice, description: Platform default caller id applied when omitted }, to: { type: string }, agent_id: { type: string }, queue_id: { type: string }, options: { type: object, additionalProperties: true } } } } } }
       responses: { '201': { description: Created }, '422': { $ref: '#/components/responses/Error422' } }
   /calls/{id}/actions:
     post:
@@ -192,7 +192,7 @@ paths:
   /messages:
     post:
       summary: Send a message (whatsapp|sms|email) — creates the outbound interaction
-      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [customer_id, channel, to, body], properties: { customer_id: { type: string }, channel: { type: string, enum: [whatsapp, sms, email] }, from: { type: string }, to: { type: string }, body: { type: string, maxLength: 4096 }, media_urls: { type: array, items: { type: string } } } } } } }
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [customer_id, channel, to, body], properties: { customer_id: { type: string }, channel: { type: string, enum: [whatsapp, sms, email] }, from: { type: string, default: orvexa-messaging, description: Platform default sender identity applied when omitted }, to: { type: string }, body: { type: string, maxLength: 4096 }, media_urls: { type: array, items: { type: string } } } } } } }
       responses: { '201': { description: Created } }
   /routing/interactions/{id}:
     post:

@@ -2,6 +2,7 @@ package messaging
 
 import (
 	"context"
+	"strings"
 
 	"github.com/Roy-Wanyoike/orvexa/internal/interactions"
 	apperrors "github.com/Roy-Wanyoike/orvexa/pkg/errors"
@@ -27,15 +28,32 @@ type SendInput struct {
 	MediaURLs  []string `json:"media_urls"`
 }
 
+// defaultSender is the platform sender identity applied when a request omits
+// the spec-optional "from" field (issue #101: POST /api/v1/messages marks
+// from optional, so a spec-valid body must be accepted). It is the
+// messaging-plane twin of telephony's "orvexa-voice" default caller id;
+// adapters that need a provisioned sender validate the effective value and
+// fail with their typed errors (e.g. twilio.from_required).
+const defaultSender = "orvexa-messaging"
+
+// effectiveSender resolves the request's from to the wire sender.
+func effectiveSender(from string) string {
+	if strings.TrimSpace(from) == "" {
+		return defaultSender
+	}
+	return from
+}
+
 // Send creates an outbound messaging interaction and hands delivery to the
 // provider. Delivery receipts arrive as signed webhooks (single-effect via
 // idempotency keys).
 func (s *Service) Send(ctx context.Context, tenantID string, in SendInput) (*interactions.Rec, error) {
+	from := effectiveSender(in.From)
 	rec, err := s.interactions.Create(ctx, tenantID, interactions.CreateInput{
 		CustomerID:  in.CustomerID,
 		Channel:     interactions.Channel(in.Channel),
 		Direction:   interactions.DirectionOutbound,
-		Source:      in.From,
+		Source:      from,
 		Destination: in.To,
 		Provider:    string(in.Channel),
 	})
@@ -45,7 +63,7 @@ func (s *Service) Send(ctx context.Context, tenantID string, in SendInput) (*int
 	msg := &Message{
 		InteractionID: rec.ID,
 		Channel:       Channel(in.Channel),
-		From:          in.From,
+		From:          from,
 		To:            in.To,
 		Body:          in.Body,
 		MediaURLs:     in.MediaURLs,

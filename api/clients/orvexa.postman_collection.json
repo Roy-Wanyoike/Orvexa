@@ -361,7 +361,7 @@
     },
     {
       "name": "Interactions",
-      "description": "The unified interaction abstraction across voice/whatsapp/sms/email/chat/ussd. Lifecycle: pending → active → wrapup → completed|failed|canceled (guarded; illegal moves answer 409 with the allowed set).\n\n⚠ Live wire contract note: this build binds request/response fields to the Go struct names, so the create body uses underscore-less keys (`customerid`, `conversationid`, …) and records serialize as `ID`/`Status`/… — diverging from api/openapi/orvexa-v1.yaml. The requests below pin the live behavior; see docs/api-clients.md.",
+      "description": "The unified interaction abstraction across voice/whatsapp/sms/email/chat/ussd. Lifecycle: pending → active → wrapup → completed|failed|canceled (guarded; illegal moves answer 409 with the allowed set).\n\nWire contract: request and response keys are the snake_case names of api/openapi/orvexa-v1.yaml (issue #101 fix) — e.g. the create body sends `customer_id` and records serialize as `id`/`status`/….",
       "item": [
         {
           "name": "Create interaction (auto-opens conversation)",
@@ -370,7 +370,7 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"customerid\": \"{{customer_id}}\",\n  \"channel\": \"chat\",\n  \"direction\": \"inbound\",\n  \"source\": \"web\",\n  \"destination\": \"support\",\n  \"provider\": \"internal\"\n}"
+              "raw": "{\n  \"customer_id\": \"{{customer_id}}\",\n  \"channel\": \"chat\",\n  \"direction\": \"inbound\",\n  \"source\": \"web\",\n  \"destination\": \"support\",\n  \"provider\": \"internal\"\n}"
             },
             "url": { "raw": "{{ORVEXA_URL}}/api/v1/interactions", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "interactions"] },
             "description": "Inbound + no conversationid → find-or-open the customer's open conversation for the channel. Externally-triggered creates should carry `idempotencykey` (pattern ^[A-Za-z0-9._:-]{8,128}$) so replays are single-effect."
@@ -383,10 +383,10 @@
                 "exec": [
                   "pm.test(\"status is 201 Created\", () => pm.response.to.have.status(201));",
                   "const d = pm.response.json().data || {};",
-                  "if (d.ID || d.id) {",
-                  "  pm.collectionVariables.set(\"interaction_id\", d.ID || d.id);",
+                  "if (d.id) {",
+                  "  pm.collectionVariables.set(\"interaction_id\", d.id);",
                   "  pm.collectionVariables.set(\"tenant_id\", d.TenantID || d.tenant_id || \"\");",
-                  "  pm.test(\"interaction id captured\", () => pm.expect(d.ID || d.id).to.be.a(\"string\"));",
+                  "  pm.test(\"interaction id captured\", () => pm.expect(d.id).to.be.a(\"string\"));",
                   "}"
                 ]
               }
@@ -842,9 +842,9 @@
                 "exec": [
                   "pm.test(\"status is 201 Created\", () => pm.response.to.have.status(201));",
                   "const d = pm.response.json().data || {};",
-                  "if (d.ID || d.id) {",
-                  "  pm.collectionVariables.set(\"call_id\", d.ID || d.id);",
-                  "  pm.test(\"call id captured\", () => pm.expect(d.ID || d.id).to.be.a(\"string\"));",
+                  "if (d.id) {",
+                  "  pm.collectionVariables.set(\"call_id\", d.id);",
+                  "  pm.test(\"call id captured\", () => pm.expect(d.id).to.be.a(\"string\"));",
                   "}"
                 ]
               }

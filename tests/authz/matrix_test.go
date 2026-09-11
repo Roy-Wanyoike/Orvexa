@@ -481,19 +481,19 @@ func TestAuthzMatrix(t *testing.T) {
 	// R10 — POST /api/v1/interactions/
 	r10 := "POST /api/v1/interactions/"
 	m10 := "handlers.go:223 MountInteractions (capability interaction.read/write)"
-	l.probe(s, "R10", r10, m10, "no-auth", http.MethodPost, "/api/v1/interactions/", "", `{"CustomerID":"x"}`, nil, 401)
+	l.probe(s, "R10", r10, m10, "no-auth", http.MethodPost, "/api/v1/interactions/", "", `{"customer_id":"x"}`, nil, 401)
 	l.probeNoLeak(s, "R10", r10, m10, "tenant-B key (own resource control)",
 		http.MethodPost, "/api/v1/interactions/", fx.keyB,
-		fmt.Sprintf(`{"CustomerID":%q,"Channel":"chat","Direction":"inbound","Source":"matrix:b","Destination":"queue-b","Provider":"matrix","ProviderRef":"matrix:%s-b-r10"}`, fx.custB1, fx.runID),
+		fmt.Sprintf(`{"customer_id":%q,"channel":"chat","direction":"inbound","source":"matrix:b","destination":"queue-b","provider":"matrix","provider_ref":"matrix:%s-b-r10"}`, fx.custB1, fx.runID),
 		needles, 201)
 	l.probe(s, "R10", r10, m10, "tenant-A key", http.MethodPost, "/api/v1/interactions/", fx.keyA,
-		fmt.Sprintf(`{"CustomerID":%q,"Channel":"chat","Direction":"inbound","Source":"matrix:a","Destination":"queue-a","Provider":"matrix","ProviderRef":"matrix:%s-a-r10"}`, fx.custA1, fx.runID), nil, 201)
+		fmt.Sprintf(`{"customer_id":%q,"channel":"chat","direction":"inbound","source":"matrix:a","destination":"queue-a","provider":"matrix","provider_ref":"matrix:%s-a-r10"}`, fx.custA1, fx.runID), nil, 201)
 
 	// DEF-1 — D7 ratchet. Step 1: a ref-less create (R10's own probe carries a
 	// ProviderRef, so the (internal,'') slot is still free) — hard-assert 201.
 	// Step 2: a SECOND ref-less create — D7 answers 409 while the defect
 	// stands; once fixed it must 201 (a fresh interaction, nothing duplicated).
-	refless := fmt.Sprintf(`{"CustomerID":%q,"Channel":"chat","Direction":"inbound","Source":"matrix:def1","Destination":"queue-a"}`, fx.custA1)
+	refless := fmt.Sprintf(`{"customer_id":%q,"channel":"chat","direction":"inbound","source":"matrix:def1","destination":"queue-a"}`, fx.custA1)
 	code, body = s.do(t, http.MethodPost, "/api/v1/interactions/", fx.keyA, refless, nil)
 	if code != 201 {
 		l.row("DEF-1", "POST /api/v1/interactions/ (1st ref-less create)", m10, "probe 1 (tenant-A key, no ProviderRef)", "201", code, "FAIL", snip(body)).HardFails++
@@ -656,7 +656,7 @@ func TestAuthzMatrix(t *testing.T) {
 		l.row("R27", r27, m27, "tenant-A key", "201", code, "FAIL", snip(body)).HardFails++
 		t.Errorf("[R27] tenant-A placed call: got %d want 201\n%s", code, snip(body))
 	} else {
-		fx.callA1 = jsonField(t, body, "ID") // telephony.Rec ships untagged (wire key "ID")
+		fx.callA1 = jsonField(t, body, "id") // /calls returns interactions.Rec — snake_case wire contract (#101)
 		l.row("R27", r27, m27, "tenant-A key", "201", code, "PASS", "placed call "+fx.callA1)
 	}
 
@@ -847,7 +847,7 @@ func TestAuthzMatrix(t *testing.T) {
 
 	// reference-in-body probes: cross-tenant UUIDs in BODIES of B-key creates
 	refBody := func(custID string) string {
-		return fmt.Sprintf(`{"CustomerID":%q,"Channel":"chat","Direction":"inbound","Source":"matrix:ref","Destination":"queue-b","Provider":"matrix","ProviderRef":"matrix:%s-ref-inter"}`, custID, fx.runID)
+		return fmt.Sprintf(`{"customer_id":%q,"channel":"chat","direction":"inbound","source":"matrix:ref","destination":"queue-b","provider":"matrix","provider_ref":"matrix:%s-ref-inter"}`, custID, fx.runID)
 	}
 	l.probeDefect(s, "REF-1", "POST /api/v1/interactions/ (tenant-A customer_id in body)", m10,
 		"tenant-B key + tenant-A customer_id", http.MethodPost, "/api/v1/interactions/", fx.keyB, refBody(fx.custA1),

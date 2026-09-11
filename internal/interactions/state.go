@@ -82,27 +82,31 @@ func Transition(from, to Status) error {
 	return nil
 }
 
-// Rec is the interaction record as services see it.
+// Rec is the interaction record as services see it. It doubles as the wire
+// model of every interaction-plane response (POST /interactions, /calls,
+// /messages; GET /interactions/{id}), so these json tags ARE the published
+// contract (#101): snake_case keys exactly as api/openapi/orvexa-v1.yaml
+// documents them — Go field names never reach the wire.
 type Rec struct {
-	ID              string
-	TenantID        string
-	ConversationID  string
-	CustomerID      string
-	Channel         Channel
-	Direction       Direction
-	Status          Status
-	Source          string
-	Destination     string
-	AssignedAgentID string
-	AssignedQueueID string
-	StartedAt       time.Time
-	AnsweredAt      *time.Time
-	EndedAt         *time.Time
-	EndReason       string
-	Provider        string
-	ProviderRef     string
-	IdempotencyKey  string
-	Attributes      map[string]any
+	ID              string         `json:"id"`
+	TenantID        string         `json:"tenant_id"`
+	ConversationID  string         `json:"conversation_id"`
+	CustomerID      string         `json:"customer_id"`
+	Channel         Channel        `json:"channel"`
+	Direction       Direction      `json:"direction"`
+	Status          Status         `json:"status"`
+	Source          string         `json:"source"`
+	Destination     string         `json:"destination"`
+	AssignedAgentID string         `json:"assigned_agent_id,omitempty"`
+	AssignedQueueID string         `json:"assigned_queue_id,omitempty"`
+	StartedAt       time.Time      `json:"started_at"`
+	AnsweredAt      *time.Time     `json:"answered_at,omitempty"`
+	EndedAt         *time.Time     `json:"ended_at,omitempty"`
+	EndReason       string         `json:"end_reason,omitempty"`
+	Provider        string         `json:"provider"`
+	ProviderRef     string         `json:"provider_ref,omitempty"`
+	IdempotencyKey  string         `json:"idempotency_key,omitempty"`
+	Attributes      map[string]any `json:"attributes"`
 }
 
 // Terminal reports whether the status ends the interaction.
