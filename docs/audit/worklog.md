@@ -331,3 +331,48 @@ visible when it lands; #103 (simulator internal receipts ledger-only) leaves the
 voice leg dependent on public-gateway callbacks; #106 inflation keeps J2's analytics assertion
 at >=1 (ratchet to ==1 documented); e2e suite still requires the go toolchain + devstack bundle
 (no docker) by design.
+
+## Wave E2 — [O-40] issue #49: security re-verification on FINAL main — adversarial pass (agent E2)
+
+**Branch:** `security/final-verify` · **Base:** main @ `283aed5` (final main, all waves merged) ·
+**Ownership honored:** `docs/security/security-posture.md` + `scripts/security-scan.sh` (extension
+forced by a proven finding). The authz-matrix harness (`tests/authz/`) was only RE-RUN (regenerated
+report is its own documented output), never edited; adversarial probes were scripted outside the
+tree (committed pins stay with the owning packages' existing unit tests).
+
+**Deliverables:**
+- **Gate re-runs on final main:** secret scan CLEAN (exit 0, 340 tracked files; canary re-validated:
+  planted credential → exit 1) · `govulncheck ./...` **0 symbol / 0 package / 4 module-level**
+  (all `golang.org/x/crypto` v0.54.0, all unreachable — GO-2026-5004/5777/5775 gone since #81) ·
+  authz matrix `go test -race -tags=authz ./tests/authz/` exit 0: **153 probes, 14 PASS-SECURED,
+  0 DEFECT, 0 FAIL** — D1–D6 (#92–#97), D7 (#90), D8 **#98 404-consistency** (R9/R25/IDW-3) and
+  D9 **#99 typed 409** all re-proven secured; `tests/authz/MATRIX.md` regenerated in-tree ·
+  full matrix `go test -race ./...` exit 0 (35 packages ok, was 31 at #39) · gofmt/vet/build/
+  lint-todos clean · TODO/FIXME sweep over `*.go` non-test: 0 hits.
+- **NEW finding (re-verification earning its keep):** first scan on final main was RED (exit 1) —
+  the committed evidence pack embeds a verbatim earlier scan transcript whose quoted evidence paths
+  are ≥40-char high-entropy tokens with no covering filter → 3 self-referential actionable C9 hits.
+  Fixed in `scripts/security-scan.sh` with one narrow justified rule (C9 token on a qa/evidence/**
+  scanner-finding-shaped line = redacted-at-source transcript; token detectors C1–C8/C12 stay
+  unfiltered on evidence files). Canary re-validated post-change.
+- **Black-box adversarial pass (wired stack: devstack PG + cmd/api, harness posture, scripted from
+  tmp only):** webhook replay (202 duplicate=false → 200 duplicate=true, same derived event id —
+  #59 contract fix live), tampered body/signature/missing signature 401 fail-closed, unregistered
+  provider path 401, per-provider verifier attack matrices pinned by `TestAttackMatrix`; OIDC
+  forgery (alg=none, HS256 attacker-secret, HS256 RSA-pubkey confusion, tampered sig, wrong
+  iss/aud/exp/nbf/kid) all 401 — `TestVerifyForgeryMatrix` + `TestDualAuthForgedJWTIsFinal`;
+  all 7 security headers present on chi-native 404/405/429 paths; webhook rate-limit burst →
+  15 × 429 + Retry-After, limiter keyed on socket RemoteAddr (unspoofable). 16/16 checks green.
+- `docs/security/security-posture.md`: §9 re-verification (gates, new finding, matrix re-run,
+  adversarial table, refreshed residual risks incl. **#103 resolved by #109** — provider-events
+  consumer ships; R1/#81 and R5/#59 marked resolved) + final VERDICT line.
+
+**Verification (CI-equivalent local full matrix):** `gofmt -l .` empty · `go vet ./...` clean ·
+`go build ./...` clean · `go test -race ./...` exit 0 (35 ok) · `go test -race -tags=authz
+./tests/authz/` exit 0 (153/0/0/14-secured) · `make lint-todos` clean · `bash scripts/security-scan.sh`
+exit 0 CLEAN (canary exit 1) · `govulncheck ./...` 0 reachable.
+
+**Risks / follow-ups:** residual table R2–R4/R6/R9/R10 documented and non-blocking (x/crypto
+module-level bump is hygiene, go.mod outside E2 ownership; AT allowlist unconfigured = allow+WARN;
+public GETs un-limited; config-dependent production posture is fail-closed by default). No new
+secrets; no credential material in logs/errors/tests (keys minted per run, masked in report).
