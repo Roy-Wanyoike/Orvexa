@@ -1,0 +1,18 @@
+orvexa e2e demo — MANAGED mode (booting devstack + api + worker + fresh tenant)
+building api + worker from the current tree…
+stack ready: http://127.0.0.1:55446 (devstack :55445, pid api=28186 worker=28187)
+demo tenant seeded (key orvx_e2e_542…)
+
+── 1/12 health ─────────────────────────────────────────
+  ✓ PASS  1/12 stack ready
+
+── 2/12 customer with two channel identities ─────────────────────────────────────────
+  ✓ PASS  2/12 customer 5fc5e4dc-409f-46a4-9c2c-002b9e8f24bc (phone + whatsapp identities)
+
+── 3/12 identifier resolution — same customer via phone ─────────────────────────────────────────
+  ✓ PASS  3/12 resolve OK (254712345678 → +254712345678 → same customer)
+
+── 4/12 inbound WhatsApp interaction (conversation auto-opened) ─────────────────────────────────────────
+  ✗ FAIL  4/12 interaction create failed
+
+══ SUMMARY — FAILURES ABOVE (transcript: /home/z/my-project/agents/E1/orvexa/qa/evidence/2026-09-11/journeys/demo-loop-023016.txt) ══

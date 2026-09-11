@@ -1,0 +1,21 @@
+$ bash -c make release VERSION=v0.10.1-rc1 && echo && ls -la dist/ && echo && ./dist/orvexa-api --version 2>/dev/null || true
+---
+CHANGELOG.md structure ok
+go build -ldflags '-s -w -X github.com/Roy-Wanyoike/orvexa/internal/platform/buildinfo.Version=v0.10.1-rc1 -X github.com/Roy-Wanyoike/orvexa/internal/platform/buildinfo.Commit=35de2a0 -X github.com/Roy-Wanyoike/orvexa/internal/platform/buildinfo.Date=2026-09-11T02:37:54Z' -o dist/orvexa-api ./cmd/api
+go build -ldflags '-s -w -X github.com/Roy-Wanyoike/orvexa/internal/platform/buildinfo.Version=v0.10.1-rc1 -X github.com/Roy-Wanyoike/orvexa/internal/platform/buildinfo.Commit=35de2a0 -X github.com/Roy-Wanyoike/orvexa/internal/platform/buildinfo.Date=2026-09-11T02:37:54Z' -o dist/orvexa-worker ./cmd/worker
+go build -ldflags '-s -w -X github.com/Roy-Wanyoike/orvexa/internal/platform/buildinfo.Version=v0.10.1-rc1 -X github.com/Roy-Wanyoike/orvexa/internal/platform/buildinfo.Commit=35de2a0 -X github.com/Roy-Wanyoike/orvexa/internal/platform/buildinfo.Date=2026-09-11T02:37:54Z' -o dist/orvexa-realtime ./cmd/realtime
+sbom: wrote dist/orvexa.cdx.json.NIKFd7.tmp (52 components)
+sbom validation: OK — CycloneDX 1.5, serial urn:uuid:4360c8ed-7fac-588d-81f5-9d95710610dd, 52 components, tool scripts/sbom.sh
+sbom: 13355 bytes at dist/orvexa.cdx.json
+== release artifacts in dist/: orvexa-api orvexa-worker orvexa-realtime orvexa.cdx.json (version=v0.10.1-rc1 commit=35de2a0)
+
+total 39300
+drwxrwxr-x  2 z z     4096 Sep 11 02:37 .
+drwxrwxr-x 15 z z     4096 Sep 11 02:37 ..
+-rwxrwxr-x  1 z z 13021447 Sep 11 02:37 orvexa-api
+-rwxrwxr-x  1 z z 11686151 Sep 11 02:37 orvexa-realtime
+-rwxrwxr-x  1 z z 15499527 Sep 11 02:37 orvexa-worker
+-rw-------  1 z z    13355 Sep 11 02:37 orvexa.cdx.json
+
+{"time":"2026-09-11T02:37:56.676521605Z","level":"WARN","msg":"no ORVEXA_DATABASE_URL configured — running without durable storage","service":"orvexa-api","env":"development"}
+{"time":"2026-09-11T02:37:56.676728985Z","level":"INFO","msg":"orvexa-api listening","service":"orvexa-api","env":"development","addr":":8080"}

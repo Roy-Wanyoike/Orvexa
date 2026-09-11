@@ -1,0 +1,71 @@
+orvexa e2e demo — MANAGED mode (booting devstack + api + worker + fresh tenant)
+building api + worker from the current tree…
+stack ready: http://127.0.0.1:55446 (devstack :55445, pid api=28877 worker=28878)
+demo tenant seeded (key orvx_e2e_99d…)
+
+── 1/12 health ─────────────────────────────────────────
+  ✓ PASS  1/12 stack ready
+
+── 2/12 customer with two channel identities ─────────────────────────────────────────
+  ✓ PASS  2/12 customer 1b4d5687-b053-4411-a2de-8e1b4037f403 (phone + whatsapp identities)
+
+── 3/12 identifier resolution — same customer via phone ─────────────────────────────────────────
+  ✓ PASS  3/12 resolve OK (254712345678 → +254712345678 → same customer)
+
+── 4/12 inbound WhatsApp interaction (conversation auto-opened) ─────────────────────────────────────────
+  ✓ PASS  4/12 inbound whatsapp interaction a6de1634-c6f1-47da-86dd-ffdd14709fc8 (conversation 23e0b805-3e49-4b49-a28f-f23cd468416d, pending)
+
+── 5/12 signed provider webhook → replay deduped → tamper fail-closed ─────────────────────────────────────────
+  ✓ PASS  5a signed webhook accepted (202, processed): event_id=auto_a38a404d5f2c041af1c6b233f426ac4f
+  ✓ PASS  5b FAILURE INJECTION replay: duplicate=true, same event_id (single effect)
+  ✓ PASS  5c FAILURE INJECTION tamper: 401 webhook.invalid_signature (fail-closed ingress)
+  ✓ PASS  5d interaction active after the signed provider event
+
+── 6/12 agent presence ─────────────────────────────────────────
+  ✓ PASS  6/12 agent fa5d67d2-22ef-42de-a7f5-b6667077df3c available (skills: billing, language: sw)
+
+── 7/12 routing decision → assignment ─────────────────────────────────────────
+  ✓ PASS  7/12 assigned_agent decision recorded + applied to the interaction
+
+── 8/12 outbound call via the simulator carrier (one leg per tenant — #90) ─────────────────────────────────────────
+  ✓ PASS  8a outbound call afac8ba4-cf64-4ca1-b164-9dfdb006da26 placed; carrier callbacks (call.ringing → call.connected) active
+  ✓ PASS  8b hangup → complete: interaction completed
+
+── 9/12 case lifecycle + link ─────────────────────────────────────────
+  ✓ PASS  9/12 case linked + open → in_progress → resolved → closed
+
+── 10/12 callback workflow ─────────────────────────────────────────
+  ✓ PASS  10/12 callback workflow 72151e89-dfb9-41c9-922a-13c0d12f9a0e started
+
+── 11/12 wrap-up + conversation close ─────────────────────────────────────────
+  ✓ PASS  11/12 inbound interaction wrap-up → completed; conversation closed (continuous context resolved)
+
+── 12/12 analytics facts ─────────────────────────────────────────
+  ✓ PASS  12/12 analytics summary: {"total_interactions":4,"interactions_by_channel":{"":2,"voice":1,"whatsapp":1}}
+
+── DONE — demo loop green (12/12) ─────────────────────────────────────────
+
+══ customer-journey suite (go test -race -tags=e2e ./tests/e2e/) ══
+
+  ✓ PASS  journeys J1+J2+J3 GREEN (transcript: /home/z/my-project/agents/E1/orvexa/qa/evidence/2026-09-11/journeys/go-journeys-023541.txt)
+
+════════ E2E SUMMARY (2026-09-11T02:35:50Z) ════════
+  ✓ 1/12 stack ready
+  ✓ 2/12 customer 1b4d5687-b053-4411-a2de-8e1b4037f403 (phone + whatsapp identities)
+  ✓ 3/12 resolve OK (254712345678 → +254712345678 → same customer)
+  ✓ 4/12 inbound whatsapp interaction a6de1634-c6f1-47da-86dd-ffdd14709fc8 (conversation 23e0b805-3e49-4b49-a28f-f23cd468416d, pending)
+  ✓ 5a signed webhook accepted (202, processed): event_id=auto_a38a404d5f2c041af1c6b233f426ac4f
+  ✓ 5b FAILURE INJECTION replay: duplicate=true, same event_id (single effect)
+  ✓ 5c FAILURE INJECTION tamper: 401 webhook.invalid_signature (fail-closed ingress)
+  ✓ 5d interaction active after the signed provider event
+  ✓ 6/12 agent fa5d67d2-22ef-42de-a7f5-b6667077df3c available (skills: billing, language: sw)
+  ✓ 7/12 assigned_agent decision recorded + applied to the interaction
+  ✓ 8a outbound call afac8ba4-cf64-4ca1-b164-9dfdb006da26 placed; carrier callbacks (call.ringing → call.connected) active
+  ✓ 8b hangup → complete: interaction completed
+  ✓ 9/12 case linked + open → in_progress → resolved → closed
+  ✓ 10/12 callback workflow 72151e89-dfb9-41c9-922a-13c0d12f9a0e started
+  ✓ 11/12 inbound interaction wrap-up → completed; conversation closed (continuous context resolved)
+  ✓ 12/12 analytics summary: {"total_interactions":4,"interactions_by_channel":{"":2,"voice":1,"whatsapp":1}}
+  ✓ journeys J1+J2+J3 GREEN (transcript: /home/z/my-project/agents/E1/orvexa/qa/evidence/2026-09-11/journeys/go-journeys-023541.txt)
+════════ transcript: /home/z/my-project/agents/E1/orvexa/qa/evidence/2026-09-11/journeys/demo-loop-023541.txt
+════════ RESULT: ALL GREEN ════════

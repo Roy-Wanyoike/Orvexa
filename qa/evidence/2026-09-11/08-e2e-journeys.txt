@@ -1,0 +1,14 @@
+$ bash -c echo "== preamble: stopping any running devstack — e2e harness owns its cycle on 55445 (per harness envDevstackPort + task note)"; scripts/devstack.sh stop; echo; echo "== glue-fix note: run1 failed (422 request.body_malformed) — journeys aligned to the #101/#110 snake_case interaction wire contract (see 08-e2e-journeys.failed-run1.txt)"; echo; echo "== gate: go test -race -count=1 -tags=e2e ./tests/e2e/"; go test -race -count=1 -tags=e2e ./tests/e2e/
+---
+== preamble: stopping any running devstack — e2e harness owns its cycle on 55445 (per harness envDevstackPort + task note)
+[devstack 2026-09-11T02:29:15Z] not running — stop is a no-op
+
+== glue-fix note: run1 failed (422 request.body_malformed) — journeys aligned to the #101/#110 snake_case interaction wire contract (see 08-e2e-journeys.failed-run1.txt)
+
+== gate: go test -race -count=1 -tags=e2e ./tests/e2e/
+ok  	github.com/Roy-Wanyoike/orvexa/tests/e2e	34.508s
+---
+exit_code=0
+duration_sec=35
+finished_utc=2026-09-11T02:29:50Z
+host_psql_check=see-devstack-gate

@@ -18,9 +18,9 @@ import (
 // replay of the read receipt (dedupe asserted).
 //
 // Contract notes (kept visible so the drift stays fixed upstream):
-//   - interactions.Rec has no JSON tags, so the response body carries Go
-//     field names (data.ID / data.Status) — asserted verbatim here; the
-//     OpenAPI casing drift is tracked in #101.
+//   - interactions.Rec carries snake_case JSON tags since the wire-contract
+//     fix (#101/#110) — the journey decodes data.id / data.status as documented;
+//     the historical PascalCase drift is closed.
 //   - Issue #103 (filed, unfixed): the simulator's INTERNAL sent/delivered
 //     receipts are signed into the provider_events ledger via gateway.Ingest,
 //     but no consumer applies them — activation at step 3 comes from the
@@ -55,10 +55,10 @@ func TestJourney2_OutboundSMS_Receipts_Analytics(t *testing.T) {
 	//    simulator carrier; the carrier reports progress via signed webhooks
 	//    delivered through the same fail-closed public gateway.
 	var sent struct {
-		ID        string `json:"ID"`
-		Status    string `json:"Status"`
-		Channel   string `json:"Channel"`
-		Direction string `json:"Direction"`
+		ID        string `json:"id"`
+		Status    string `json:"status"`
+		Channel   string `json:"channel"`
+		Direction string `json:"direction"`
 	}
 	decode(t, doJSON(t, "POST", "/api/v1/messages", tn.RawKey, map[string]any{
 		"customer_id": cust.ID,
@@ -68,7 +68,7 @@ func TestJourney2_OutboundSMS_Receipts_Analytics(t *testing.T) {
 		"body":        "Your order #4192 has shipped and arrives Thursday.",
 	}), 201, &sent)
 	if sent.ID == "" {
-		t.Fatal("message send returned no interaction id (expected data.ID — interactions.Rec has no JSON tags)")
+		t.Fatal("message send returned no interaction id (expected data.id — snake_case wire contract #110)")
 	}
 	if sent.Channel != "sms" || sent.Direction != "outbound" {
 		t.Fatalf("unexpected interaction shape: %+v", sent)
@@ -81,7 +81,7 @@ func TestJourney2_OutboundSMS_Receipts_Analytics(t *testing.T) {
 	//    (ledger-only until #103 — see contract note above).
 	waitFor(t, "outbound interaction to be active", 15*time.Second, func() (bool, string) {
 		var cur struct {
-			Status string `json:"Status"`
+			Status string `json:"status"`
 		}
 		decode(t, doJSON(t, "GET", "/api/v1/interactions/"+sent.ID, tn.RawKey, nil), 200, &cur)
 		return cur.Status == "active", "status=" + cur.Status
@@ -131,7 +131,7 @@ func TestJourney2_OutboundSMS_Receipts_Analytics(t *testing.T) {
 	//    moves the interaction to completed.
 	waitFor(t, "interaction to complete via message.read", 15*time.Second, func() (bool, string) {
 		var cur struct {
-			Status string `json:"Status"`
+			Status string `json:"status"`
 		}
 		decode(t, doJSON(t, "GET", "/api/v1/interactions/"+sent.ID, tn.RawKey, nil), 200, &cur)
 		return cur.Status == "completed", "status=" + cur.Status

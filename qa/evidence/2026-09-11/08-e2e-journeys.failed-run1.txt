@@ -1,0 +1,23 @@
+$ bash -c echo "== preamble: stopping authz-cycle devstack (55439) — e2e harness owns its own cycle on 55445 (per harness envDevstackPort + task note)"; scripts/devstack.sh stop; echo; echo "== gate: go test -race -count=1 -tags=e2e ./tests/e2e/"; go test -race -count=1 -tags=e2e ./tests/e2e/
+---
+== preamble: stopping authz-cycle devstack (55439) — e2e harness owns its own cycle on 55445 (per harness envDevstackPort + task note)
+[devstack 2026-09-11T02:25:26Z] stopping (mode=smart)
+waiting for server to shut down.... done
+server stopped
+[devstack 2026-09-11T02:25:26Z] stopped cleanly (pid 26731 gone, pid file removed)
+
+== gate: go test -race -count=1 -tags=e2e ./tests/e2e/
+--- FAIL: TestJourney1_InboundWhatsApp_Routing_Assignment_Wrapup_CaseClose (0.01s)
+    j1_inbound_whatsapp_test.go:34: J1 tenant 3f101c81-1077-4b47-8698-e5b28ebe7f40 (key orvx_e2e_ba6…)
+    j1_inbound_whatsapp_test.go:44: ✓ stack ready (db up)
+    j1_inbound_whatsapp_test.go:60: ✓ customer 16cb7b48-d15d-4b7b-81c2-7ecb06b1d196 created
+    j1_inbound_whatsapp_test.go:72: ✓ identifier resolution: 254712345678 → +254712345678 → same customer
+    j1_inbound_whatsapp_test.go:90: status = 422, want 201 (error=&{Code:request.body_malformed Message:request body is not valid JSON for this resource})
+FAIL
+FAIL	github.com/Roy-Wanyoike/orvexa/tests/e2e	33.329s
+FAIL
+---
+exit_code=1
+duration_sec=34
+finished_utc=2026-09-11T02:26:00Z
+host_psql_check=see-devstack-gate

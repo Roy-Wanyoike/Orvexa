@@ -1,0 +1,7 @@
+$ go build ./...
+---
+---
+exit_code=0
+duration_sec=3
+finished_utc=2026-09-11T02:18:01Z
+host_psql_check=see-devstack-gate

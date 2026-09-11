@@ -1,0 +1,34 @@
+$ bash scripts/e2e-demo.sh
+---
+orvexa e2e demo — MANAGED mode (booting devstack + api + worker + fresh tenant)
+[devstack 2026-09-11T02:30:16Z] bundle jar cached: /home/z/my-project/agents/E1/orvexa/.devstack/cache/zonky/embedded-postgres-binaries-linux-amd64-16.4.0.jar
+[devstack 2026-09-11T02:30:16Z] bundle already extracted: /home/z/my-project/agents/E1/orvexa/.devstack/bundle/16.4.0
+[devstack 2026-09-11T02:30:16Z] data dir already initialized: /home/z/my-project/agents/E1/orvexa/.devstack/pg/data
+[devstack 2026-09-11T02:30:16Z] starting postgres on 127.0.0.1:55445
+[devstack 2026-09-11T02:30:16Z] postgres ready (pid 28046, port 55445)
+[devstack 2026-09-11T02:30:16Z] applying migrations from /home/z/my-project/agents/E1/orvexa/migrations (lexical order, ON_ERROR_STOP)
+[devstack 2026-09-11T02:30:16Z] no psql in bundle — using pgx runner (one tx per file, schema_migrations tracked)
+[devstack 2026-09-11T02:30:16Z] migrations up to date
+[devstack 2026-09-11T02:30:16Z] start complete — url: postgres://postgres:***@127.0.0.1:55445/orvexa?sslmode=disable
+building api + worker from the current tree…
+stack ready: http://127.0.0.1:55446 (devstack :55445, pid api=28186 worker=28187)
+demo tenant seeded (key orvx_e2e_542…)
+
+── 1/12 health ─────────────────────────────────────────
+  ✓ PASS  1/12 stack ready
+
+── 2/12 customer with two channel identities ─────────────────────────────────────────
+  ✓ PASS  2/12 customer 5fc5e4dc-409f-46a4-9c2c-002b9e8f24bc (phone + whatsapp identities)
+
+── 3/12 identifier resolution — same customer via phone ─────────────────────────────────────────
+  ✓ PASS  3/12 resolve OK (254712345678 → +254712345678 → same customer)
+
+── 4/12 inbound WhatsApp interaction (conversation auto-opened) ─────────────────────────────────────────
+  ✗ FAIL  4/12 interaction create failed
+
+══ SUMMARY — FAILURES ABOVE (transcript: /home/z/my-project/agents/E1/orvexa/qa/evidence/2026-09-11/journeys/demo-loop-023016.txt) ══
+---
+exit_code=1
+duration_sec=33
+finished_utc=2026-09-11T02:30:49Z
+host_psql_check=see-devstack-gate

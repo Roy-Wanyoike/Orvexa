@@ -20,10 +20,10 @@ import (
 //
 // Contract notes (issue #89 findings, kept visible so the drift stays fixed):
 //   - POST /api/v1/interactions is documented with snake_case body fields in
-//     api/openapi/orvexa-v1.yaml, but interactions.CreateInput carries no JSON
-//     tags and the handler decodes with DisallowUnknownFields — the documented
-//     body is rejected 422. The journey sends case-insensitive-binding keys
-//     ("customerid") until the handler drift is fixed (filed upstream).
+//     api/openapi/orvexa-v1.yaml. The handler drift (CreateInput without JSON
+//     tags) was fixed by the snake_case wire contract (#101/#110): the journey
+//     now sends the documented snake_case body and decodes the snake_case
+//     response, so OpenAPI ⇄ wire ⇄ journey all agree.
 //   - The comms processor vocabulary has no "inbound.whatsapp" topic: inbound
 //     provider events must reference an existing interaction id and use the
 //     lifecycle topics (message.delivered/message.read/…), so the journey
@@ -72,20 +72,20 @@ func TestJourney1_InboundWhatsApp_Routing_Assignment_Wrapup_CaseClose(t *testing
 	t.Log("✓ identifier resolution: 254712345678 → +254712345678 → same customer")
 
 	// 3. inbound WhatsApp interaction — conversation auto-opened (continuous context)
-	//    See contract note: "customerid" is the case-insensitive binding workaround.
+	//    Documented snake_case body (#101/#110); no workaround keys.
 	inter := doJSON(t, "POST", "/api/v1/interactions", tn.RawKey, map[string]any{
-		"customerid":  cust.ID,
+		"customer_id": cust.ID,
 		"channel":     "whatsapp",
 		"direction":   "inbound",
 		"source":      "+254712345678",
 		"destination": "+254700000000",
 	})
 	var rec struct {
-		ID             string `json:"ID"`
-		ConversationID string `json:"ConversationID"`
-		Status         string `json:"Status"`
-		Channel        string `json:"Channel"`
-		Direction      string `json:"Direction"`
+		ID             string `json:"id"`
+		ConversationID string `json:"conversation_id"`
+		Status         string `json:"status"`
+		Channel        string `json:"channel"`
+		Direction      string `json:"direction"`
 	}
 	decode(t, inter, 201, &rec)
 	if rec.ID == "" || rec.ConversationID == "" {
@@ -139,7 +139,7 @@ func TestJourney1_InboundWhatsApp_Routing_Assignment_Wrapup_CaseClose(t *testing
 
 	// 7. the provider event landed: interaction is now active
 	var active struct {
-		Status string `json:"Status"`
+		Status string `json:"status"`
 	}
 	waitFor(t, "interaction to become active", 15*time.Second, func() (bool, string) {
 		decode(t, doJSON(t, "GET", "/api/v1/interactions/"+rec.ID, tn.RawKey, nil), 200, &active)
@@ -203,8 +203,8 @@ func TestJourney1_InboundWhatsApp_Routing_Assignment_Wrapup_CaseClose(t *testing
 
 	// 11. assignment applied to the interaction
 	var assigned struct {
-		AssignedAgentID string `json:"AssignedAgentID"`
-		Status          string `json:"Status"`
+		AssignedAgentID string `json:"assigned_agent_id"`
+		Status          string `json:"status"`
 	}
 	decode(t, doJSON(t, "GET", "/api/v1/interactions/"+rec.ID, tn.RawKey, nil), 200, &assigned)
 	if assigned.AssignedAgentID != agent.ID {
@@ -217,7 +217,7 @@ func TestJourney1_InboundWhatsApp_Routing_Assignment_Wrapup_CaseClose(t *testing
 
 	// 12. wrap-up: customer left, after-call work begins
 	var wrapped struct {
-		Status string `json:"Status"`
+		Status string `json:"status"`
 	}
 	decode(t, doJSON(t, "POST", "/api/v1/interactions/"+rec.ID+"/transition", tn.RawKey, map[string]any{"to": "wrapup"}), 200, &wrapped)
 	if wrapped.Status != "wrapup" {
@@ -260,7 +260,7 @@ func TestJourney1_InboundWhatsApp_Routing_Assignment_Wrapup_CaseClose(t *testing
 
 	// 14. interaction completed after the work is done
 	var completed struct {
-		Status string `json:"Status"`
+		Status string `json:"status"`
 	}
 	decode(t, doJSON(t, "POST", "/api/v1/interactions/"+rec.ID+"/transition", tn.RawKey, map[string]any{
 		"to": "completed", "end_reason": "resolved",
