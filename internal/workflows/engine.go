@@ -93,6 +93,23 @@ type StartCallbackInput struct {
 	Notes      string    `json:"notes"`
 }
 
+// customerOwned verifies the referenced customer belongs to the caller's
+// tenant: workflow_instances carries no customer FK, so without this scope a
+// foreign-tenant customer_id was accepted (201) and callbacks/collections
+// would operate on another tenant's contact data (#97, MAT-D6).
+func (e *Engine) customerOwned(ctx context.Context, tenantID, customerID string) error {
+	var owned bool
+	if err := e.pool.QueryRow(ctx, `
+			SELECT EXISTS (SELECT 1 FROM customers WHERE id = $1 AND tenant_id = $2)`,
+		customerID, tenantID).Scan(&owned); err != nil {
+		return apperrors.Internal("db.read_failed", "workflow failed").WithCause(err)
+	}
+	if !owned {
+		return apperrors.NotFound("customer.not_found", "customer not found")
+	}
+	return nil
+}
+
 // StartCallback creates a callback workflow: schedule → wait → contact.
 func (e *Engine) StartCallback(ctx context.Context, tenantID string, in StartCallbackInput) (*Instance, error) {
 	if in.CustomerID == "" {
@@ -100,6 +117,9 @@ func (e *Engine) StartCallback(ctx context.Context, tenantID string, in StartCal
 	}
 	if in.Phone == "" {
 		return nil, apperrors.Invalid("workflow.phone_required", "phone is required")
+	}
+	if err := e.customerOwned(ctx, tenantID, in.CustomerID); err != nil {
+		return nil, err
 	}
 	when := in.ScheduleAt
 	if when.IsZero() {
@@ -132,6 +152,9 @@ func (e *Engine) StartCollections(ctx context.Context, tenantID string, in Start
 	}
 	if in.Phone == "" {
 		return nil, apperrors.Invalid("workflow.phone_required", "phone is required")
+	}
+	if err := e.customerOwned(ctx, tenantID, in.CustomerID); err != nil {
+		return nil, err
 	}
 	return e.start(ctx, tenantID, TypeCollections, map[string]any{
 		"customer_id": in.CustomerID, "invoice_ref": in.InvoiceRef,
