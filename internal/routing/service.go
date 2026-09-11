@@ -186,6 +186,21 @@ func (s *Service) Route(ctx context.Context, tenantID string, req Request) (*Dec
 	if req.Priority < 1 || req.Priority > 10 {
 		req.Priority = 5
 	}
+	// The routed interaction must belong to the caller's tenant. Without
+	// this scope the decision was persisted under the CALLER's tenant while
+	// embedding a foreign-tenant interaction UUID (identifier disclosure +
+	// referential pollution, echoed by GET /routing/decisions) — and the
+	// 200-vs-404 difference acted as an enumeration oracle (#96, MAT-D5).
+	// Checked before any evaluation or persistence.
+	var interactionOwned bool
+	if err := s.pool.QueryRow(ctx, `
+			SELECT EXISTS (SELECT 1 FROM interactions WHERE id = $1 AND tenant_id = $2)`,
+		req.InteractionID, tenantID).Scan(&interactionOwned); err != nil {
+		return nil, apperrors.Internal("db.read_failed", "routing failed").WithCause(err)
+	}
+	if !interactionOwned {
+		return nil, apperrors.NotFound("interaction.not_found", "interaction not found")
+	}
 	agents, err := s.agentViews(ctx, tenantID, req.QueueID)
 	if err != nil {
 		return nil, err
