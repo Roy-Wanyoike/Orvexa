@@ -192,8 +192,11 @@ func (g *Gateway) persistEvent(ctx context.Context, provider string, body []byte
 		return nil, apperrors.Internal("webhook.persist_failed", "ingestion failed").WithCause(err)
 	}
 	if res.RowsAffected() == 0 {
+		// Replay: the idempotency contract is that duplicates return the ORIGINAL
+		// event id — the derived provider_event_id (what MarkProcessed matches
+		// on), never the surrogate row id.
 		var existing string
-		if err := g.pool.QueryRow(ctx, `SELECT id FROM provider_events
+		if err := g.pool.QueryRow(ctx, `SELECT provider_event_id FROM provider_events
 			WHERE provider = $1 AND provider_event_id = $2`, provider, eventID).Scan(&existing); err != nil {
 			return nil, apperrors.Internal("webhook.lookup_failed", "ingestion failed").WithCause(err)
 		}

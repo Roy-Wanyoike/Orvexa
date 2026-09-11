@@ -186,57 +186,51 @@ placeholder until formal retention policy lands.
 
 ---
 
-## Wave C5b — [O-28] issue #37: Redis drivers (agent presence cache + distributed rate-limit store)
+## Wave D1 — [O-30] issue #39: Independent security sweep — PUBLIC-VISIBILITY GATE (agent D1)
 
-**Owner:** Agent C5 (Platform engineer, perf/state) · **Branch:** `feat/redis-drivers` · **Predecessor state:** 2 untracked files salvaged (`presence_redis.go`/.`_test.go`), re-verified, restructured, extended; everything else written fresh in this session.
+**Branch:** `security/sweep` · **Base:** main @ `6459bc5` · **Ownership honored:** only
+`scripts/security-scan.sh`, `docs/security/`, `internal/platform/httpx/` (header+limiter,
+gaps proven first), `.env.example` (security vars). Cross-surface defects filed, not patched.
 
-**Delivered:**
-- `internal/routing/presence_redis.go` — `RedisPresenceCache` implementing the same
-  `PresenceReader` + `Invalidate` surface as the in-process `PresenceStore` (additive file;
-  `presence.go` untouched). DB (`agent_presence`) stays the source of truth; Redis is a shared
-  TTL snapshot cache (`orvexa:presence:v1:<tenant>`, sorted-JSON agent-ID array, negative
-  caching of known-empty sets); `Invalidate` DELs the shared key so every node sees the drop.
-  Redis errors NEVER fail a read — dial/command/decode failures degrade to the DB read (logged,
-  no keys/URLs/credentials echoed); only DB errors propagate, exactly like the in-process store.
-  Env swap point `NewPresenceCacheFromEnv`: `ORVEXA_REDIS_URL` unset → the exact in-process
-  `*PresenceStore` (byte-identical default); set-but-malformed → error (value never echoed);
-  set-but-unreachable → driver still constructs and degrades until Redis recovers.
-- `internal/platform/httpx/limiter_redis.go` — `RedisRateLimit` implementing the exact
-  `Allow(key string, now time.Time) (bool, time.Duration)` signature of the token bucket via the
-  new `Limiter` interface (both drivers asserted against it). Server-side INCR + EXPIRE NX fixed
-  window keyed `orvexa:rl:v1:<scope>:<key>:<bucket>` — tenant principal (or client IP) + route
-  class (scope), so limits are GLOBAL across a multi-binary deployment; `now`-derived buckets
-  need NTP-synced node clocks (documented). Fail semantics implemented and documented exactly:
-  `FailClosed=false` → allow on any Redis error (open elsewhere); `FailClosed=true` → deny with
-  the remaining window (auth-critical surfaces, 429 + Retry-After); no silent in-process
-  fallback (hybrid policy would be node-dependent and untestable — documented). Honest
-  divergences from the token bucket stated in the doc comment (fixed window vs refill, no burst
-  split, maxBuckets meaningless, denied attempts still INCR, ≤2× limit across a boundary).
-  Env swap point `NewRateLimitFromEnv` mirrors the presence one.
-- Tests (both packages): in-package fakes of the go-redis `UniversalClient` surface (embedded
-  nil interface — only the commands the drivers issue are implemented; no new deps), plus RESP2
-  TCP harnesses proving the drivers against the REAL go-redis client (dial, serialization,
-  `redis.Nil` miss contract, TTL stamping, INCR/EXPIRE NX). Swap equivalence suite proves the
-  Redis limiter and `NewRateLimit` make identical decisions for the burst pattern (and asserts
-  the documented cross-boundary divergence). Integration suites (`-tags=integration`, separate
-  files, house style): `ORVEXA_REDIS_URL`-gated against the compose `redis:7` service, skipping
-  cleanly when unset — presence lifecycle (miss→load→write-back→hit→invalidate→TTL expiry) and
-  the global-budget property (two independent clients share one bucket; capacity restored for
-  both in the next window; TTL bounded by the window).
-- Docs: `.env.example` + operations runbook — `ORVEXA_REDIS_URL` row with per-driver outage
-  semantics, compose dev path, integration-suite invocation, scaling notes (multi-replica API
-  once Redis is shared; NTP clock requirement).
+**Deliverables:**
+- `scripts/security-scan.sh` — self-contained secret scanner (bash+git+python3 stdlib,
+  zero installs/network): 12 checks (AWS/Slack/OpenAI/Google/GitHub tokens, private-key
+  blocks, credential URLs, ≥40-char high-entropy strings at Shannon ≥ 4.5 bits/char,
+  tracked `.env` files, secret-named artifacts, generic credential assigns), explicit
+  per-hit allowlist justification, redaction-only output, exit 0/1/2. Canary-validated:
+  11/11 planted secret shapes detected (exit 1); tracked tree CLEAN (exit 0), 261 files.
+- govulncheck ./... triaged (9 findings): **1 symbol-level reachable — GO-2026-5004
+  (pgx < v5.9.2) via cases.Service.ListNotes → Pool.Query → sanitize.SanitizeSQL**;
+  exploitability assessed (all Orvexa SQL is extended-protocol parameterized; no
+  SanitizeSQL/simple-protocol usage) but a SQL-injection-class finding with a same-major
+  patch does not ride a public repo → bump filed as **#81**, verdict BLOCKED on it.
+  chi RealIP spoofing vulns (GO-2026-5777/5775) verified unreachable (RealIP unused;
+  clientIP = RemoteAddr).
+- `internal/platform/httpx/middleware.go` — CSP (`default-src 'none'; frame-ancestors
+  'none'; base-uri 'none'`) + HSTS (`max-age=31536000; includeSubDomains`) added to the
+  global SecurityHeaders middleware (JSON-only API ⇒ maximal CSP is free; HSTS sent
+  unconditionally per RFC 6797 + edge-TLS topology). Tests: exact header matrix on 2xx,
+  4xx and panic-recovery paths.
+- `internal/platform/httpx/middleware.go` — limiter eviction O(n²)→O(n log n): measured
+  ~150 µs/op sustained under unique-key flood at the 10k-bucket cap (algorithmic
+  DoS), now ~1.0 µs/op; policy unchanged (oldest half by last touch); committed
+  benchmark + eviction-policy test pin it.
+- Rate-limit matrix: 24/24 mutation routes covered (23 POST + 1 PUT), keys are
+  server-side only (`principal.APIKeyID` / `"oidc:"+verified sub` / socket RemoteAddr);
+  no client-supplied key input exists.
+- Webhook ingress reviewed read-only: fail-closed paths, verifier registry (#24)
+  normalization/precedence, dedupe single-effect — evidenced by the existing adversarial
+  suite (`-race` green, 87.7% coverage). Known contract bug referenced (#59).
+- `.env.example` — ORVEXA_OIDC_* security block added (CLIENT_SECRET also keys OAuth
+  state HMAC); non-security env drift filed as #82. Worklog conflict block found → #84.
+- `docs/security/security-posture.md` — evidence tables + verdict line.
 
-**Salvage notes:** predecessor's two untracked files were compile-clean and behaviorally sound;
-kept (after restructuring: compose integration test moved to the `-tags=integration` file per
-house style; unused imports trimmed; gofmt). Limiter driver + all four limiter/presence test
-harnesses and docs were written in this session.
+**Verification (CI-equivalent local full matrix):** `gofmt -l .` empty · `go vet ./...`
+clean · `go build ./...` clean · `make lint-todos` clean · `go test -race
+./internal/platform/httpx/...` green · `go test -race ./...` 31 packages ok / 0 failures.
 
-**Verification (CI-equivalent local full matrix):** `gofmt -l .` empty · `go vet ./...` clean
-(incl. `-tags=integration`) · `go build ./...` clean · `go test -race ./...` all 29 packages
-green · `make lint-todos` clean · integration suites green against a REAL Redis 7.2.5
-(source-built in-sandbox, compose unavailable here): `TestRedisPresenceComposeIntegration` PASS
-(1.10s), `TestRedisRateLimitComposeIntegration` PASS (2.16s); both skip cleanly without the env.
+**PR:** "security: independent sweep — secret scan, govulncheck, headers, rate-limit
+matrix (#39)" — Closes #39.
 
 **PR:** "feat(infra): Redis presence cache + distributed rate-limit drivers (#37)" — Closes #37.
 

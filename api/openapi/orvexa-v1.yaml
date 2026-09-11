@@ -12,21 +12,17 @@ servers:
   - url: /api/v1
 security:
   - ApiKeyAuth: []
-components:
-  securitySchemes:
-    ApiKeyAuth:
-      type: apiKey
-      in: header
-      name: X-API-Key
-      description: 'Authorization: Bearer <key> also accepted.'
-  parameters:
-    cursor: { name: cursor, in: query, schema: { type: string }, description: Opaque pagination cursor. }
-    limit: { name: limit, in: query, schema: { type: integer, default: 25, maximum: 100 } }
-  responses:
-    Error422: { description: Validation failed (error.code=*.invalid|malformed) }
-    Error404: { description: Not found or foreign-tenant id (indistinguishable) }
-    Error409: { description: Illegal state transition / duplicate }
+# NOTE (issue #41): a single components block — the previously duplicated
+# top-level `components:` key (securitySchemes/parameters/responses up here,
+# schemas at the bottom) was unparseable by strict YAML loaders (yaml.v3
+# rejects duplicate mapping keys). The blocks are merged at the bottom of
+# this document; `#/components/...` pointers are unchanged.
 paths:
+  /:
+    get:
+      summary: Resource index (discovery)
+      description: Lists the top-level resource families served under /api/v1 (envelope data = {resources[]}).
+      responses: { '200': { description: OK } }
   /customers:
     post:
       summary: Create a customer with identifiers
@@ -111,7 +107,37 @@ paths:
                             updated_at: { type: string, format: date-time }
                             score: { type: number }
         '422': { $ref: '#/components/responses/Error422' }
-        '503': { description: Search degraded (error.code=search.unavailable when the backend is down, search.not_configured when unset) }
+        # Quoted: an unquoted flow scalar silently truncates at the comma and
+        # injects a ghost mapping key for strict YAML parsers (found by #41).
+        '503': { description: 'Search degraded (error.code=search.unavailable when the backend is down, search.not_configured when unset)' }
+  /identity/authorize-url:
+    get:
+      summary: OIDC authorization-url bootstrap ([O-29], issue #38)
+      description: |
+        Public (no API key). Mounted ONLY when the OIDC identity plane is
+        configured (ORVEXA_OIDC_*); a deployment without it answers
+        404 identity.disabled instead of this route. Success returns
+        envelope data = {authorize_url, state, nonce, expires_in, redirect_uri}.
+      security: []
+      responses:
+        '200': { description: OK }
+        '500': { description: Identity provider discovery failed (identity.discovery_failed) }
+  /identity/callback:
+    get:
+      summary: OIDC code exchange + token verification ([O-29], issue #38)
+      description: |
+        Public (no API key). Mounted ONLY when the OIDC identity plane is
+        configured. State validation → code exchange → ID-token verification
+        → tenant-scoped principal info.
+      security: []
+      parameters:
+        - { name: code, in: query, required: true, schema: { type: string } }
+        - { name: state, in: query, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Authenticated }
+        '401': { description: State, exchange or token verification failed }
+        '404': { description: OIDC not configured (identity.disabled) }
+        '422': { $ref: '#/components/responses/Error422' }
   /interactions:
     post:
       summary: Create an interaction (conversation auto-opened when omitted)
@@ -208,6 +234,19 @@ paths:
       requestBody: { required: true, content: { application/json: { schema: { type: object } } } }
       responses: { '200': { description: Duplicate (idempotent replay) }, '202': { description: Accepted }, '401': { description: Signature invalid } }
 components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: 'Authorization: Bearer <key> also accepted.'
+  parameters:
+    cursor: { name: cursor, in: query, schema: { type: string }, description: Opaque pagination cursor. }
+    limit: { name: limit, in: query, schema: { type: integer, default: 25, maximum: 100 } }
+  responses:
+    Error422: { description: Validation failed (error.code=*.invalid|malformed) }
+    Error404: { description: Not found or foreign-tenant id (indistinguishable) }
+    Error409: { description: Illegal state transition / duplicate }
   schemas:
     CustomerCreate:
       type: object
