@@ -2,6 +2,8 @@ package telephony
 
 import (
 	"context"
+	"errors"
+	"strings"
 
 	"github.com/Roy-Wanyoike/orvexa/internal/interactions"
 	apperrors "github.com/Roy-Wanyoike/orvexa/pkg/errors"
@@ -98,14 +100,14 @@ func (s *Service) ApplyAction(ctx context.Context, tenantID, interactionID, acti
 		// the provider's call.ended webhook drives pending/active→wrapup;
 		// the service never duplicates provider-driven transitions.
 		if err := s.provider.Hangup(ctx, ProviderRef(rec.ID)); err != nil {
-			return nil, apperrors.Internal("call.provider_failed", "provider hangup failed").WithCause(err)
+			return nil, mapProviderActionErr(err, "hangup")
 		}
 	case "transfer":
 		if destination == "" {
 			return nil, apperrors.Invalid("call.destination_required", "transfer requires destination")
 		}
 		if err := s.provider.Transfer(ctx, ProviderRef(rec.ID), destination); err != nil {
-			return nil, apperrors.Internal("call.provider_failed", "provider transfer failed").WithCause(err)
+			return nil, mapProviderActionErr(err, "transfer")
 		}
 	case "hold":
 		err = s.provider.Hold(ctx, ProviderRef(rec.ID))
@@ -119,7 +121,23 @@ func (s *Service) ApplyAction(ctx context.Context, tenantID, interactionID, acti
 			"action must be answer|hangup|transfer|hold|resume|complete")
 	}
 	if err != nil {
+		// [O-31]/#99: provider unknown-leg errors on unplaced interactions must
+		// surface as a typed 4xx (409), never a 500.
+		if aerr := mapProviderActionErr(err, action); aerr != nil {
+			return nil, aerr
+		}
 		return nil, err
 	}
 	return s.interactions.Get(ctx, tenantID, rec.ID)
+}
+
+// mapProviderActionErr translates provider unknown-leg failures into a typed
+// conflict; any other error passes through unchanged (nil = not mapped).
+func mapProviderActionErr(err error, action string) error {
+	var ae *apperrors.Error
+	if errors.As(err, &ae) && strings.HasSuffix(ae.Code, ".unknown_leg") {
+		return apperrors.Conflict("call.unknown_leg",
+			"no live provider leg for this interaction: "+action+" requires an active call")
+	}
+	return nil
 }
