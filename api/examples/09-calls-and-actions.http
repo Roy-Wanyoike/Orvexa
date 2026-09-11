@@ -1,0 +1,45 @@
+### Orvexa API v1 — journey step 09: outbound calls
+### PlaceCall creates a pending voice interaction and hands the leg to the
+### provider (simulator by default — the full ringing→connected→ended loop is
+### delivered locally as signed webhooks). The API returns immediately:
+### nothing beyond telephony blocks the critical path.
+
+@ORVEXA_URL = {{$processEnv ORVEXA_URL}}
+@ORVEXA_KEY = {{$processEnv ORVEXA_KEY}}
+
+### Place the outbound call → 201 (captures the voice interaction ID)
+# @name placeCall
+POST {{ORVEXA_URL}}/api/v1/calls
+X-API-Key: {{ORVEXA_KEY}}
+Content-Type: application/json
+
+{
+  "customer_id": "{{createCustomer.response.body.$.data.id}}",
+  "to": "+254712345678"
+}
+
+###
+
+### Hang up → 200 (interaction → wrapup)
+# action ∈ answer|hangup|transfer|hold|resume|complete (transfer adds
+# "destination"); illegal state → 409
+# @name callHangup
+POST {{ORVEXA_URL}}/api/v1/calls/{{placeCall.response.body.$.data.ID}}/actions
+X-API-Key: {{ORVEXA_KEY}}
+Content-Type: application/json
+
+{
+  "action": "hangup"
+}
+
+###
+
+### Complete → 200 (wrapup → completed, terminal)
+# @name callComplete
+POST {{ORVEXA_URL}}/api/v1/calls/{{placeCall.response.body.$.data.ID}}/actions
+X-API-Key: {{ORVEXA_KEY}}
+Content-Type: application/json
+
+{
+  "action": "complete"
+}

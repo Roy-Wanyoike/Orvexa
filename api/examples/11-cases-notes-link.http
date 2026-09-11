@@ -1,0 +1,79 @@
+### Orvexa API v1 — journey step 11: cases, notes, link
+### Open a case (serialized per-tenant ref), add a note, link the interaction,
+### walk the guarded lifecycle (open → in_progress → pending_customer →
+### resolved → closed; reopen legal from resolved; closed is terminal).
+
+@ORVEXA_URL = {{$processEnv ORVEXA_URL}}
+@ORVEXA_KEY = {{$processEnv ORVEXA_KEY}}
+
+### Open a case → 201 (priority ∈ low|normal|high|urgent, default normal)
+# @name openCase
+POST {{ORVEXA_URL}}/api/v1/cases
+X-API-Key: {{ORVEXA_KEY}}
+Content-Type: application/json
+
+{
+  "customer_id": "{{createCustomer.response.body.$.data.id}}",
+  "subject": "Billing dispute",
+  "description": "Customer disputes the March invoice total",
+  "priority": "normal"
+}
+
+###
+
+### Add a note → 201 (author_type ∈ agent|ai_agent|system; body ≤ 8000)
+# @name addCaseNote
+POST {{ORVEXA_URL}}/api/v1/cases/{{openCase.response.body.$.data.id}}/notes
+X-API-Key: {{ORVEXA_KEY}}
+Content-Type: application/json
+
+{
+  "author_type": "agent",
+  "author_id": "{{registerAgent.response.body.$.data.id}}",
+  "body": "Checked with the billing team — invoice is being corrected.",
+  "internal": true
+}
+
+###
+
+### List notes → 200
+# @name listCaseNotes
+GET {{ORVEXA_URL}}/api/v1/cases/{{openCase.response.body.$.data.id}}/notes
+X-API-Key: {{ORVEXA_KEY}}
+
+###
+
+### Link the chat interaction to the case → 204 No Content
+# (swap {{createInteraction...$.data.ID}} for the voice call ID to link that)
+# @name linkInteraction
+POST {{ORVEXA_URL}}/api/v1/cases/{{openCase.response.body.$.data.id}}/interactions/{{createInteraction.response.body.$.data.ID}}/link
+X-API-Key: {{ORVEXA_KEY}}
+
+###
+
+### Transition: open → in_progress → 200
+# to ∈ open|in_progress|pending_customer|resolved|closed|canceled
+# (illegal → 409; reopen legal from resolved)
+# @name transitionCase
+POST {{ORVEXA_URL}}/api/v1/cases/{{openCase.response.body.$.data.id}}/transition
+X-API-Key: {{ORVEXA_KEY}}
+Content-Type: application/json
+
+{
+  "to": "in_progress",
+  "reason": "investigating"
+}
+
+###
+
+### Get the case → 200
+# @name getCase
+GET {{ORVEXA_URL}}/api/v1/cases/{{openCase.response.body.$.data.id}}
+X-API-Key: {{ORVEXA_KEY}}
+
+###
+
+### List cases → 200
+# @name listCases
+GET {{ORVEXA_URL}}/api/v1/cases
+X-API-Key: {{ORVEXA_KEY}}

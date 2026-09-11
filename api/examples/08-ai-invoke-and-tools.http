@@ -1,0 +1,56 @@
+### Orvexa API v1 — journey step 08: governed AI
+### One metered turn per invoke (token usage clamped to the configured cap;
+### suggestions are advisory, never auto-executed) and tool execution through
+### the allowlist gateway (schema + rate + audit).
+
+@ORVEXA_URL = {{$processEnv ORVEXA_URL}}
+@ORVEXA_KEY = {{$processEnv ORVEXA_KEY}}
+
+### Runtime view of the agent configuration → 200
+# @name aiAgentView
+GET {{ORVEXA_URL}}/api/v1/ai/agents/{{registerAgent.response.body.$.data.id}}
+X-API-Key: {{ORVEXA_KEY}}
+
+###
+
+### Invoke one governed turn → 200 {text, suggestion?, input_tokens, output_tokens, outcome}
+# outcome ∈ completed|refused|timeout|failed — refusal over hallucination
+# @name aiInvoke
+POST {{ORVEXA_URL}}/api/v1/ai/agents/{{registerAgent.response.body.$.data.id}}/invoke
+X-API-Key: {{ORVEXA_KEY}}
+Content-Type: application/json
+
+{
+  "interaction_id": "{{createInteraction.response.body.$.data.ID}}",
+  "user_message": "What is my balance?",
+  "facts": { "plan": "pilot" }
+}
+
+###
+
+### Execute a tool through the gateway → 200 {tool, executed, result?, reason?}
+### ⚠ LIVE WIRE CONTRACT NOTE: the body binds to Go field names in this build —
+### `Tool` / `InteractionID` / `Args` (snake_case `interaction_id` does NOT
+### match and the request 422s) — diverging from api/openapi/orvexa-v1.yaml.
+### Allowlist: get_customer | create_case | send_whatsapp (403 otherwise, 429
+### when rate-capped; refusals are audited).
+# @name aiTool
+POST {{ORVEXA_URL}}/api/v1/ai/agents/{{registerAgent.response.body.$.data.id}}/tools
+X-API-Key: {{ORVEXA_KEY}}
+Content-Type: application/json
+
+{
+  "Tool": "get_customer",
+  "InteractionID": "{{createInteraction.response.body.$.data.ID}}",
+  "Args": { "customer_id": "{{createCustomer.response.body.$.data.id}}" }
+}
+
+###
+
+### (Optional) other action enums for /calls/{id}/actions live in 09-calls.http
+### and transfer needs a destination:
+# POST {{ORVEXA_URL}}/api/v1/calls/{{placeCall.response.body.$.data.ID}}/actions
+# X-API-Key: {{ORVEXA_KEY}}
+# Content-Type: application/json
+#
+# { "action": "transfer", "destination": "+254700000000" }

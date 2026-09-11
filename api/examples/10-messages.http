@@ -1,0 +1,38 @@
+### Orvexa API v1 — journey step 10: outbound messages
+### Send a message (whatsapp | sms | email) — creates the outbound interaction
+### and hands delivery to the provider; delivered/read receipts arrive as
+### signed webhooks. NOTE: `from` is optional in api/openapi/orvexa-v1.yaml
+### but this build requires source/destination endpoints — include `from`.
+
+@ORVEXA_URL = {{$processEnv ORVEXA_URL}}
+@ORVEXA_KEY = {{$processEnv ORVEXA_KEY}}
+
+### Send an SMS → 201
+# @name sendSms
+POST {{ORVEXA_URL}}/api/v1/messages
+X-API-Key: {{ORVEXA_KEY}}
+Content-Type: application/json
+
+{
+  "customer_id": "{{createCustomer.response.body.$.data.id}}",
+  "channel": "sms",
+  "from": "orvexa-sms",
+  "to": "+254712345678",
+  "body": "Your ticket is resolved. Reply STOP to opt out."
+}
+
+###
+
+### (Variant) WhatsApp send — same endpoint, channel=whatsapp, body ≤ 4096,
+### media_urls optional array of strings:
+# POST {{ORVEXA_URL}}/api/v1/messages
+# X-API-Key: {{ORVEXA_KEY}}
+# Content-Type: application/json
+#
+# {
+#   "customer_id": "{{createCustomer.response.body.$.data.id}}",
+#   "channel": "whatsapp",
+#   "from": "orvexa-whatsapp",
+#   "to": "+254712345678",
+#   "body": "Your statement is ready."
+# }

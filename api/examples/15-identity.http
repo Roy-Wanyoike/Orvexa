@@ -1,0 +1,21 @@
+### Orvexa API v1 — journey step 15: identity (OIDC, [O-29])
+### Public login surface — mounted ONLY when the identity plane is configured
+### (ORVEXA_OIDC_ISSUER / _CLIENT_ID / _CLIENT_SECRET all set). Without it the
+### routes are not mounted: authorize-url answers the router's plain-text 404
+### (not the JSON error envelope) — the API-key path is unchanged.
+### Full contract: docs/rbac.md.
+
+@ORVEXA_URL = {{$processEnv ORVEXA_URL}}
+
+### Authorize-url bootstrap → 200 {authorize_url, state, nonce, expires_in,
+### redirect_uri} (500 identity.discovery_failed when the IdP is unreachable)
+# @name identityAuthorizeUrl
+GET {{ORVEXA_URL}}/api/v1/identity/authorize-url
+
+###
+
+### Callback: state validation → code exchange → ID-token verification →
+### tenant-scoped principal info. Drive through the real IdP redirect
+### (401 when state/exchange/verification fails, 404 when disabled).
+# @name identityCallback
+GET {{ORVEXA_URL}}/api/v1/identity/callback?code=probe&state=probe

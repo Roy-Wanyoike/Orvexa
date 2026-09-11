@@ -43,8 +43,8 @@
   ],
   "item": [
     {
-      "name": "Health",
-      "description": "Liveness and component-truth probes (journey gate: `/readyz` must report `ready` before any business call). Public — no API key.",
+      "name": "Health & Discovery",
+      "description": "Liveness and component-truth probes (journey gate: `/readyz` must report `ready` before any business call). Public — no API key — plus the authenticated `GET /api/v1/` resource index (surface map).",
       "item": [
         {
           "name": "Readiness (journey gate)",
@@ -81,6 +81,27 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"status is 200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Discovery index",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1"] },
+            "description": "Authenticated resource index \u2014 the machine-readable surface map ({data.resources[]}). Requires the API key (401 auth.missing_key without it)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200 OK\", () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data || {};",
+                  "pm.test(\"lists resources\", () => pm.expect(d.resources).to.be.an(\"array\").that.is.not.empty);"
                 ]
               }
             }
