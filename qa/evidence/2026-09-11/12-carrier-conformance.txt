@@ -1,0 +1,13 @@
+?   	github.com/Roy-Wanyoike/orvexa/internal/telephony	[no test files]
+ok  	github.com/Roy-Wanyoike/orvexa/internal/telephony/adapters/africastalking	13.339s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/telephony/adapters/asterisk	57.101s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/telephony/adapters/freeswitch	22.616s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/telephony/adapters/twilio	6.579s
+?   	github.com/Roy-Wanyoike/orvexa/internal/messaging	[no test files]
+ok  	github.com/Roy-Wanyoike/orvexa/internal/messaging/adapters/africastalking	1.105s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/messaging/adapters/twilio	5.104s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/messaging/adapters/whatsappcloud	5.165s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/comms	1.013s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/comms/conformance	3.878s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/comms/factory	1.025s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/comms/registry	1.029s

@@ -1,0 +1,10 @@
+ok  	github.com/Roy-Wanyoike/orvexa/internal/platform/bus	1.355s
+?   	github.com/Roy-Wanyoike/orvexa/internal/analytics	[no test files]
+ok  	github.com/Roy-Wanyoike/orvexa/internal/analytics/clickhouse	1.177s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/search	1.146s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/routing	2.730s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/platform/httpx	3.203s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/identity	3.203s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/workflows	1.012s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/workflows	1.014s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/workflows/temporaldriver	1.106s
