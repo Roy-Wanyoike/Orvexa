@@ -33,20 +33,26 @@ func NewService(pool *pgxpool.Pool, ob Outbox, source string) *Service {
 	return &Service{pool: pool, outbox: ob, source: source}
 }
 
-// CreateInput is the validated create model. Conversation handling:
-// conversationID empty + inbound → find-or-open the customer's open
-// conversation for the channel (continuous context across interactions).
+// CreateInput is the validated create model. The json tags are the request
+// contract of POST /api/v1/interactions (#101): they mirror the OpenAPI
+// InteractionCreate schema exactly (snake_case), so a documented body binds
+// while any property the schema does not declare (e.g. "attributes") stays
+// rejected by the handler's DisallowUnknownFields decoder. Plane services
+// (telephony/messaging) construct inputs in Go and may set Attributes.
+// Conversation handling: conversationID empty + inbound → find-or-open the
+// customer's open conversation for the channel (continuous context across
+// interactions).
 type CreateInput struct {
-	ConversationID string
-	CustomerID     string
-	Channel        Channel
-	Direction      Direction
-	Source         string
-	Destination    string
-	Provider       string
-	ProviderRef    string
-	IdempotencyKey string
-	Attributes     map[string]any
+	ConversationID string         `json:"conversation_id"`
+	CustomerID     string         `json:"customer_id"`
+	Channel        Channel        `json:"channel"`
+	Direction      Direction      `json:"direction"`
+	Source         string         `json:"source"`
+	Destination    string         `json:"destination"`
+	Provider       string         `json:"provider"`
+	ProviderRef    string         `json:"provider_ref"`
+	IdempotencyKey string         `json:"idempotency_key"`
+	Attributes     map[string]any `json:"-"`
 }
 
 // Create opens an interaction. Externally-triggered creates MUST carry an

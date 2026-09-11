@@ -94,18 +94,20 @@ and never persisted as processed.
 
 ## 5. Live-wire contract notes
 
-Two places where this build's HTTP binding is narrower than the OpenAPI
-document (the examples pin what actually runs, with ⚠ notes in-file):
+One place where this build's HTTP binding is narrower than the OpenAPI
+document (the example pins what actually runs, with a ⚠ note in-file):
 
-- `POST /api/v1/interactions` and `POST /api/v1/ai/agents/{id}/tools` bind
-  request bodies with `DisallowUnknownFields` to Go field names
-  (`customerid`, `conversationid`, `idempotencykey`; `Tool`/`InteractionID`/`Args`)
-  — snake_case variants 422.
-- Interaction records serialize with Go-default field names
-  (`ID`, `TenantID`, `Status`, …).
+- `POST /api/v1/ai/agents/{id}/tools` binds its request body with
+  `DisallowUnknownFields` to Go field names (`Tool`/`InteractionID`/`Args`)
+  — the snake_case variants documented in the spec answer 422.
 
-Reconciling these with the spec is tracked outside this issue; the examples
-are the executable truth in the meantime.
+The interaction plane drifted the same way until issue #101 fixed it:
+`interactions.Rec` and `interactions.CreateInput` now carry snake_case json
+tags, so interaction-plane requests and responses speak the documented
+contract exactly (`customer_id`, `id`, `status`, …), and `POST
+/api/v1/messages` applies the platform default sender (`orvexa-messaging`)
+when the optional `from` is omitted. The AI-tools bullet above remains the
+only live drift; reconciling it is tracked outside this issue.
 
 ## 6. Quickstart pointer
 

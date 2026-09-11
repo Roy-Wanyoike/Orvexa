@@ -123,10 +123,9 @@ func (s *stack) do(t *testing.T, method, path, key, body string, hdr map[string]
 
 // jsonField extracts a string field from a response body. Success bodies are
 // enveloped as {data, meta} (httpx.Envelope), so the resource is looked up
-// inside "data" first, falling back to the top level. Note: most Rec types
-// carry json tags (lowercase "id"), but interactions.Rec ships without tags,
-// so its wire keys are the Go field names ("ID", "ConversationID",
-// "TenantID") — callers pass the exact key.
+// inside "data" first, falling back to the top level. All Rec types carry
+// snake_case json tags (issue #101 contract) — callers pass the exact key
+// as it appears on the wire (e.g. "id", "conversation_id").
 func jsonField(t *testing.T, body, field string) string {
 	t.Helper()
 	m := map[string]any{}
@@ -443,9 +442,8 @@ func (s *stack) seedFixtures(t *testing.T) {
 		fmt.Sprintf(`{"name":"authz-q-a-%s","priority":5}`, fx.fx_run()),
 		"queueA1")
 
-	// wire-contract note: interactions.CreateInput ships WITHOUT json tags, so
-	// its request keys are the Go field names (CustomerID, Channel, ...); the
-	// response likewise carries Go field names ("ID"/"ConversationID").
+	// wire-contract note (#101): interaction-plane request bodies and response
+	// keys are the documented snake_case of api/openapi/orvexa-v1.yaml.
 	// Each seed carries a distinct ProviderRef: the platform dedupes
 	// (tenant_id, provider, provider_ref) and binds a ref-less create as '',
 	// so a second ref-less create per tenant would 409 (defect D7). Real
@@ -454,13 +452,12 @@ func (s *stack) seedFixtures(t *testing.T) {
 	seedInteraction := func(key, cust, channel, dest string) (interID, convID string) {
 		seedN++
 		code, resp := post(key, "/api/v1/interactions/",
-			fmt.Sprintf(`{"CustomerID":%q,"Channel":%q,"Direction":"inbound","Source":"seed:matrix","Destination":%q,"Provider":"matrix","ProviderRef":"matrix:%s-%d"}`,
+			fmt.Sprintf(`{"customer_id":%q,"channel":%q,"direction":"inbound","source":"seed:matrix","destination":%q,"provider":"matrix","provider_ref":"matrix:%s-%d"}`,
 				cust, channel, dest, fx.runID, seedN))
 		if code != http.StatusCreated {
 			t.Fatalf("seed interaction (%s): got %d want 201\n%s", channel, code, resp)
 		}
-		// interactions.Rec has no json tags → wire keys are "ID"/"ConversationID".
-		return jsonField(t, resp, "ID"), jsonField(t, resp, "ConversationID")
+		return jsonField(t, resp, "id"), jsonField(t, resp, "conversation_id")
 	}
 	fx.interA1, fx.convA1 = seedInteraction(fx.keyA, fx.custA1, "chat", "queue-a")
 	fx.interA2, fx.convA2 = seedInteraction(fx.keyA, fx.custA1, "voice", "+254711000001")

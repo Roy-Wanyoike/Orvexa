@@ -23,7 +23,7 @@ X-API-Key: {{ORVEXA_KEY}}
 ###
 
 ### Interaction timeline of the conversation → 200
-# ⚠ records serialize with Go field names in this build (ID/Status/…) —
+# records serialize with the documented snake_case keys (id/status/…) —
 #   see docs/api-clients.md → “Live wire contract notes”
 # @name conversationTimeline
 GET {{ORVEXA_URL}}/api/v1/conversations/{{listOpenConversations.response.body.$.data[0].id}}/interactions
