@@ -1,0 +1,55 @@
+### Orvexa API v1 — journey step 06: conversations
+### The interaction created in step 04 auto-opened (or joined) the customer's
+### open chat conversation. Inspect it, work the timeline, assign, and — when
+### the whole journey is done — close it (terminal).
+
+@ORVEXA_URL = {{$processEnv ORVEXA_URL}}
+@ORVEXA_KEY = {{$processEnv ORVEXA_KEY}}
+
+### List open conversations → 200 (status ∈ open|closed)
+# @name listOpenConversations
+GET {{ORVEXA_URL}}/api/v1/conversations?status=open&limit=25
+X-API-Key: {{ORVEXA_KEY}}
+
+###
+
+### Get the first open conversation
+# (replace with a concrete id after the first run — REST Client resolves the
+#  JSONPath once listOpenConversations has returned data)
+# @name getConversation
+GET {{ORVEXA_URL}}/api/v1/conversations/{{listOpenConversations.response.body.$.data[0].id}}
+X-API-Key: {{ORVEXA_KEY}}
+
+###
+
+### Interaction timeline of the conversation → 200
+# ⚠ records serialize with Go field names in this build (ID/Status/…) —
+#   see docs/api-clients.md → “Live wire contract notes”
+# @name conversationTimeline
+GET {{ORVEXA_URL}}/api/v1/conversations/{{listOpenConversations.response.body.$.data[0].id}}/interactions
+X-API-Key: {{ORVEXA_KEY}}
+
+###
+
+### Assign agent + queue → 200 (either id alone is fine)
+# @name assignConversation
+POST {{ORVEXA_URL}}/api/v1/conversations/{{listOpenConversations.response.body.$.data[0].id}}/assign
+X-API-Key: {{ORVEXA_KEY}}
+Content-Type: application/json
+
+{
+  "agent_id": "{{registerAgent.response.body.$.data.id}}",
+  "queue_id": "{{createQueue.response.body.$.data.id}}"
+}
+
+###
+
+### Close the conversation → 200 (TERMINAL — run deliberately, last)
+# @name closeConversation
+POST {{ORVEXA_URL}}/api/v1/conversations/{{listOpenConversations.response.body.$.data[0].id}}/close
+X-API-Key: {{ORVEXA_KEY}}
+Content-Type: application/json
+
+{
+  "reason": "resolved"
+}

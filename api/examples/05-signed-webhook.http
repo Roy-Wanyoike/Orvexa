@@ -1,0 +1,64 @@
+### Orvexa API v1 — journey step 05: SIGNED provider webhook
+### POST /api/v1/webhooks/{provider} is PUBLIC but HMAC-verified and
+### fail-closed: nothing unverified is persisted as processed.
+###
+### HOW THE SIGNATURE IS COMPUTED (platform scheme — any provider without a
+### registered carrier verifier; exactly what scripts/e2e-demo.sh does):
+###
+###     X-Orvexa-Signature: hex(HMAC-SHA256(ORVEXA_SECRET, rawBody))
+###
+### e2e-demo.sh helper (source of truth for the math):
+###
+###     SIG=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac "$ORVEXA_SECRET" -hex | awk '{print $2}')
+###
+### 1. Hash the EXACT raw body bytes below (a one-byte difference rejects).
+###    For the single-line body used here:
+###
+###    printf '%s' '{"event":"message.delivered","interaction_id":"<ID from step 04>","tenant_id":"<TenantID from step 04>","detail":"delivered to handset"}' \
+###      | openssl dgst -sha256 -hmac "$ORVEXA_SECRET" -hex | awk '{print $2}'
+###
+### 2. Export it and send:  export ORVEXA_WEBHOOK_SIG=<hex>
+###
+### Server config: ORVEXA_WEBHOOK_HMAC_SECRET must equal ORVEXA_SECRET.
+### Carrier-registered providers verify differently instead (twilio:
+### X-Twilio-Signature HMAC-SHA1 over url+fields; whatsappcloud [exact registry
+### key] : X-Hub-Signature-256: sha256=<hex(HMAC-SHA256(appSecret, rawBody))>;
+### africastalking: peer-IP allowlist) — docs/runbooks/operations.md.
+###
+### The payload contract (internal/comms): event ∈ call.ringing|call.connected|
+### call.ended|call.wrapup|call.failed|message.sent|message.delivered|
+### message.wrapup|message.read|message.failed, interaction_id = platform
+### interaction UUID, tenant_id = tenant UUID. The event drives a guarded
+### lifecycle transition on that interaction.
+
+@ORVEXA_URL = {{$processEnv ORVEXA_URL}}
+@ORVEXA_WEBHOOK_SIG = {{$processEnv ORVEXA_WEBHOOK_SIG}}
+
+### Signed delivery → 202 Accepted {event_id, duplicate:false, processed:true}
+# @name signedWebhook
+POST {{ORVEXA_URL}}/api/v1/webhooks/whatsapp_cloud
+Content-Type: application/json
+X-Orvexa-Signature: {{ORVEXA_WEBHOOK_SIG}}
+
+{"event":"message.delivered","interaction_id":"REPLACE_WITH_INTERACTION_ID","tenant_id":"REPLACE_WITH_TENANT_ID","detail":"delivered to handset"}
+
+###
+
+### Replay the SAME delivery → 200 {event_id: <original>, duplicate:true}
+### Idempotency is keyed on the raw body — replays are single-effect.
+# @name signedWebhookReplay
+POST {{ORVEXA_URL}}/api/v1/webhooks/whatsapp_cloud
+Content-Type: application/json
+X-Orvexa-Signature: {{ORVEXA_WEBHOOK_SIG}}
+
+{"event":"message.delivered","interaction_id":"REPLACE_WITH_INTERACTION_ID","tenant_id":"REPLACE_WITH_TENANT_ID","detail":"delivered to handset"}
+
+###
+
+### Unsigned delivery → 401 webhook.invalid_signature (fail-closed, nothing
+### persisted as processed — no unsigned ingestion path exists)
+# @name unsignedWebhookRejected
+POST {{ORVEXA_URL}}/api/v1/webhooks/whatsapp_cloud
+Content-Type: application/json
+
+{"event":"message.delivered","interaction_id":"REPLACE_WITH_INTERACTION_ID","tenant_id":"REPLACE_WITH_TENANT_ID"}

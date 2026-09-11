@@ -1,0 +1,24 @@
+### Orvexa API v1 — journey step 07: deterministic routing
+### Route the interaction (scored on skills coverage, presence, priority;
+### queue pinning supported). Decisions are recorded immutably.
+
+@ORVEXA_URL = {{$processEnv ORVEXA_URL}}
+@ORVEXA_KEY = {{$processEnv ORVEXA_KEY}}
+
+### Route the interaction from step 04 → 200 (the decision)
+# @name routeInteraction
+POST {{ORVEXA_URL}}/api/v1/routing/interactions/{{createInteraction.response.body.$.data.ID}}
+X-API-Key: {{ORVEXA_KEY}}
+Content-Type: application/json
+
+{
+  "required_skills": ["billing"],
+  "priority": 5
+}
+
+###
+
+### Decision records (immutable, filterable by interaction) → 200
+# @name listRoutingDecisions
+GET {{ORVEXA_URL}}/api/v1/routing/decisions?interaction_id={{createInteraction.response.body.$.data.ID}}
+X-API-Key: {{ORVEXA_KEY}}

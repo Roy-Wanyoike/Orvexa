@@ -1,0 +1,47 @@
+### Orvexa API v1 — journey step 12: durable workflows
+### Callback and collections ladders. Instances are resumable, observable and
+### cancelable (409 when already terminal).
+
+@ORVEXA_URL = {{$processEnv ORVEXA_URL}}
+@ORVEXA_KEY = {{$processEnv ORVEXA_KEY}}
+
+### Start a callback workflow → 201 (schedule_at optional RFC3339)
+# @name startCallback
+POST {{ORVEXA_URL}}/api/v1/workflows/callbacks
+X-API-Key: {{ORVEXA_KEY}}
+Content-Type: application/json
+
+{
+  "customer_id": "{{createCustomer.response.body.$.data.id}}",
+  "phone": "+254712345678",
+  "notes": "dispute follow-up"
+}
+
+###
+
+### Read the instance → 200 {id, type, status, payload, state, current_step, next_run_at, attempts}
+# @name getCallbackWorkflow
+GET {{ORVEXA_URL}}/api/v1/workflows/{{startCallback.response.body.$.data.id}}
+X-API-Key: {{ORVEXA_KEY}}
+
+###
+
+### Start a collections ladder → 201
+# @name startCollections
+POST {{ORVEXA_URL}}/api/v1/workflows/collections
+X-API-Key: {{ORVEXA_KEY}}
+Content-Type: application/json
+
+{
+  "customer_id": "{{createCustomer.response.body.$.data.id}}",
+  "invoice_ref": "INV-2026-0001",
+  "amount_due": 1500,
+  "phone": "+254712345678"
+}
+
+###
+
+### Cancel the callback workflow → 200 (409 if already terminal)
+# @name cancelWorkflow
+POST {{ORVEXA_URL}}/api/v1/workflows/{{startCallback.response.body.$.data.id}}/cancel
+X-API-Key: {{ORVEXA_KEY}}

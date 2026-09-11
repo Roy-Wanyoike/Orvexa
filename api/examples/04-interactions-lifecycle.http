@@ -1,0 +1,66 @@
+### Orvexa API v1 — journey step 04: interaction lifecycle
+### Open an interaction (auto-opens the customer's open conversation for the
+### channel when conversationid is omitted), walk the guarded lifecycle
+### (pending → active → wrapup → completed|failed|canceled; illegal → 409),
+### assign agent/queue.
+###
+### ⚠ LIVE WIRE CONTRACT NOTE (diverges from api/openapi/orvexa-v1.yaml):
+### this build binds the create body to the Go struct field names with
+### DisallowUnknownFields, so keys are underscore-less here — `customerid`,
+### `conversationid`, `providerref`, `idempotencykey` — and interaction
+### records serialize as `ID`, `TenantID`, `Status`, … The OpenAPI documents
+### snake_case; until the two agree, the requests below pin what actually
+### runs (see docs/api-clients.md → “Live wire contract notes”).
+
+@ORVEXA_URL = {{$processEnv ORVEXA_URL}}
+@ORVEXA_KEY = {{$processEnv ORVEXA_KEY}}
+
+### Create an inbound chat interaction → 201 (captures ID + TenantID)
+# inbound + no conversationid → find-or-open the customer's open conversation
+# @name createInteraction
+POST {{ORVEXA_URL}}/api/v1/interactions
+X-API-Key: {{ORVEXA_KEY}}
+Content-Type: application/json
+
+{
+  "customerid": "{{createCustomer.response.body.$.data.id}}",
+  "channel": "chat",
+  "direction": "inbound",
+  "source": "web",
+  "destination": "support",
+  "provider": "internal",
+  "idempotencykey": "d9-chat-0001"
+}
+
+###
+
+### Get the interaction → 200
+# @name getInteraction
+GET {{ORVEXA_URL}}/api/v1/interactions/{{createInteraction.response.body.$.data.ID}}
+X-API-Key: {{ORVEXA_KEY}}
+
+###
+
+### Guarded transition: pending → active → 200
+# to ∈ pending|active|wrapup|completed|failed|canceled (illegal → 409 with
+# error.details.allowed)
+# @name transitionActive
+POST {{ORVEXA_URL}}/api/v1/interactions/{{createInteraction.response.body.$.data.ID}}/transition
+X-API-Key: {{ORVEXA_KEY}}
+Content-Type: application/json
+
+{
+  "to": "active"
+}
+
+###
+
+### Assign the agent (agent_id/queue_id both optional) → 200
+# @name assignInteraction
+POST {{ORVEXA_URL}}/api/v1/interactions/{{createInteraction.response.body.$.data.ID}}/assign
+X-API-Key: {{ORVEXA_KEY}}
+Content-Type: application/json
+
+{
+  "agent_id": "{{registerAgent.response.body.$.data.id}}"
+}
