@@ -124,6 +124,20 @@ func (s *Service) Open(ctx context.Context, tenantID string, in CreateInput) (*C
 		return nil, apperrors.Invalid("case.priority_invalid", "priority must be low|normal|high|urgent")
 	}
 
+	// The referenced customer must belong to the caller's tenant: the
+	// cases.customer_id FK alone validated only global existence, so a
+	// foreign-tenant customer_id was accepted (201) — and the 201-vs-404
+	// difference doubled as an existence oracle for foreign ids (#93, MAT-D2).
+	var customerOwned bool
+	if err := s.pool.QueryRow(ctx, `
+			SELECT EXISTS (SELECT 1 FROM customers WHERE id = $1 AND tenant_id = $2)`,
+		in.CustomerID, tenantID).Scan(&customerOwned); err != nil {
+		return nil, apperrors.Internal("db.read_failed", "read failed").WithCause(err)
+	}
+	if !customerOwned {
+		return nil, apperrors.NotFound("customer.not_found", "customer not found")
+	}
+
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return nil, apperrors.Internal("db.tx_failed", "write failed").WithCause(err)
