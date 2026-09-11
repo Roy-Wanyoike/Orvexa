@@ -1,0 +1,1366 @@
+{
+  "info": {
+    "_postman_id": "b7f4c2a1-5d3e-4a8f-9c6b-0d1e2f3a4b5c",
+    "name": "Orvexa API v1",
+    "description": "Orvexa — the AI-native Contact Center OS. Full v1 surface (api/openapi/orvexa-v1.yaml) organized by domain and ordered as the end-to-end integration journey:\n\nhealth → customer → resolution → agents & presence → conversation → interaction lifecycle → routing decision → AI suggestion & governed tools → outbound call → messages → case & notes → durable workflow → analytics → search → identity → signed provider webhook.\n\n## Setup\n\nSet the collection variables before running:\n\n- `ORVEXA_URL` — API base URL (e.g. `http://localhost:8080`)\n- `ORVEXA_KEY` — tenant API key (`X-API-Key`). Never commit a real key.\n- `ORVEXA_SECRET` — webhook HMAC secret (`ORVEXA_WEBHOOK_HMAC_SECRET` on the server). Never commit it.\n\nRequests capture resource ids into collection variables (`customer_id`, `interaction_id`, `call_id`, …) so the whole journey runs top-to-bottom with *Run Collection*. Every request carries a `pm.test` status snippet.\n\n## Envelope\n\nSuccess responses use `{data, meta}`; errors use `{error:{code, message, details?}}`.\n\n## Signed webhooks\n\n`POST /api/v1/webhooks/{provider}` is public but HMAC-verified: `X-Orvexa-Signature: hex(HMAC-SHA256(ORVEXA_SECRET, rawBody))` (see the Webhooks folder — the pre-request script computes both the body and its signature). Provider-registered verifiers (twilio, whatsappcloud, africastalking) use their carrier schemes instead — see docs/runbooks/operations.md § Webhook signatures.\n\nImport instructions: docs/api-clients.md. Ground truth: api/openapi/orvexa-v1.yaml.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "apikey",
+    "apikey": [
+      { "key": "in", "value": "header", "type": "string" },
+      { "key": "key", "value": "X-API-Key", "type": "string" },
+      { "key": "value", "value": "{{ORVEXA_KEY}}", "type": "string" }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// The tenant always derives from the API key — never from a request body."
+        ]
+      }
+    }
+  ],
+  "variable": [
+    { "key": "ORVEXA_URL", "value": "http://localhost:8080" },
+    { "key": "ORVEXA_KEY", "value": "" },
+    { "key": "ORVEXA_SECRET", "value": "" },
+    { "key": "customer_id", "value": "" },
+    { "key": "conversation_id", "value": "" },
+    { "key": "interaction_id", "value": "" },
+    { "key": "tenant_id", "value": "" },
+    { "key": "agent_id", "value": "" },
+    { "key": "queue_id", "value": "" },
+    { "key": "case_id", "value": "" },
+    { "key": "call_id", "value": "" },
+    { "key": "workflow_id", "value": "" },
+    { "key": "webhook_body", "value": "" },
+    { "key": "webhook_sig", "value": "" },
+    { "key": "webhook_event_id", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "description": "Liveness and component-truth probes (journey gate: `/readyz` must report `ready` before any business call). Public — no API key.",
+      "item": [
+        {
+          "name": "Readiness (journey gate)",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{ORVEXA_URL}}/readyz", "host": ["{{ORVEXA_URL}}"], "path": ["readyz"] },
+            "description": "Component truth. 200 `ready` when the DB is up; 503 `degraded` names the down component truthfully."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200 OK\", () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data || {};",
+                  "pm.test(\"readyz reports ready\", () => pm.expect(d.status).to.eql(\"ready\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Liveness",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{ORVEXA_URL}}/healthz", "host": ["{{ORVEXA_URL}}"], "path": ["healthz"] },
+            "description": "Process liveness — always 200 while the API is serving."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Customers",
+      "description": "Customer identity: create with channel identifiers, resolve an identifier back to a customer, paginate.",
+      "item": [
+        {
+          "name": "Create customer (journey: two channel identities)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"display_name\": \"Jane Wanjiku\",\n  \"language\": \"en\",\n  \"timezone\": \"Africa/Nairobi\",\n  \"identifiers\": [\n    { \"type\": \"phone\", \"value\": \"+254 712 345 678\" },\n    { \"type\": \"whatsapp\", \"value\": \"+254712345678\", \"is_primary\": true }\n  ],\n  \"tags\": [\"pilot\"]\n}"
+            },
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/customers", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "customers"] },
+            "description": "Identifiers are normalized (phone → E.164 digits, email lowercase). (tenant, type, value) is unique — an identifier can never fork into two customers."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201 Created\", () => pm.response.to.have.status(201));",
+                  "const d = pm.response.json().data || {};",
+                  "if (d.id) {",
+                  "  pm.collectionVariables.set(\"customer_id\", d.id);",
+                  "  pm.test(\"customer id captured\", () => pm.expect(d.id).to.be.a(\"string\"));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resolve identifier (normalized phone)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"phone\",\n  \"value\": \"254712345678\"\n}"
+            },
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/customers/resolve", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "customers", "resolve"] },
+            "description": "Normalization means `254712345678`, `+254712345678` and `+254 712 345 678` resolve to the same customer."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200 OK\", () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data || {};",
+                  "pm.test(\"resolves to the created customer\", () => pm.expect(d.id).to.eql(pm.collectionVariables.get(\"customer_id\")));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List customers",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{ORVEXA_URL}}/api/v1/customers?limit=25",
+              "host": ["{{ORVEXA_URL}}"],
+              "path": ["api", "v1", "customers"],
+              "query": [
+                { "key": "cursor", "value": "", "disabled": true, "description": "Opaque pagination cursor" },
+                { "key": "limit", "value": "25" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200 OK\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"data is an array\", () => pm.expect(pm.response.json().data).to.be.an(\"array\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get customer",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/customers/{{customer_id}}", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "customers", "{{customer_id}}"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200 OK\", () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data || {};",
+                  "pm.test(\"same customer id\", () => pm.expect(d.id).to.eql(pm.collectionVariables.get(\"customer_id\")));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Conversations",
+      "description": "Customer-facing threads. Inbound interactions without a conversation_id find-or-open the customer's open conversation for the channel.",
+      "item": [
+        {
+          "name": "List open conversations",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{ORVEXA_URL}}/api/v1/conversations?status=open&limit=25",
+              "host": ["{{ORVEXA_URL}}"],
+              "path": ["api", "v1", "conversations"],
+              "query": [
+                { "key": "status", "value": "open", "description": "open | closed" },
+                { "key": "cursor", "value": "", "disabled": true },
+                { "key": "limit", "value": "25" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200 OK\", () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data || [];",
+                  "if (Array.isArray(d) && d.length) pm.collectionVariables.set(\"conversation_id\", d[0].id);",
+                  "pm.test(\"data is an array\", () => pm.expect(d).to.be.an(\"array\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get conversation",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/conversations/{{conversation_id}}", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "conversations", "{{conversation_id}}"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get(\"conversation_id\")) {",
+                  "  pm.test(\"first pass: conversations open in the Interactions folder — run the tour again\", () => pm.expect(true).to.be.true);",
+                  "  return;",
+                  "}",
+                  "pm.test(\"status is 200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Interaction timeline",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{ORVEXA_URL}}/api/v1/conversations/{{conversation_id}}/interactions",
+              "host": ["{{ORVEXA_URL}}"],
+              "path": ["api", "v1", "conversations", "{{conversation_id}}", "interactions"],
+              "query": [{ "key": "cursor", "value": "", "disabled": true }]
+            },
+            "description": "Interaction records of this conversation. NOTE: the current build serializes interaction records with Go field names (e.g. `ID`, `Status`) — see docs/api-clients.md “Live wire contract notes”."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get(\"conversation_id\")) {",
+                  "  pm.test(\"first pass: conversations open in the Interactions folder — run the tour again\", () => pm.expect(true).to.be.true);",
+                  "  return;",
+                  "}",
+                  "pm.test(\"status is 200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Assign agent/queue",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"agent_id\": \"{{agent_id}}\",\n  \"queue_id\": \"{{queue_id}}\"\n}"
+            },
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/conversations/{{conversation_id}}/assign", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "conversations", "{{conversation_id}}", "assign"] },
+            "description": "Needs the ids captured in the Agents/Queues folders (later in the tour) — green on a second pass or when running folders in journey order."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get(\"conversation_id\") || !pm.collectionVariables.get(\"agent_id\")) {",
+                  "  pm.test(\"waiting for Agents/Queues ids (later in the tour) — run the tour again\", () => pm.expect(true).to.be.true);",
+                  "  return;",
+                  "}",
+                  "pm.test(\"status is 200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Close conversation (terminal)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"resolved\"\n}"
+            },
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/conversations/{{conversation_id}}/close", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "conversations", "{{conversation_id}}", "close"] },
+            "description": "Terminal state — a closed conversation is sealed. Run deliberately at the end of the journey."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get(\"conversation_id\")) {",
+                  "  pm.test(\"first pass: conversations open in the Interactions folder — run the tour again\", () => pm.expect(true).to.be.true);",
+                  "  return;",
+                  "}",
+                  "pm.test(\"status is 200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Interactions",
+      "description": "The unified interaction abstraction across voice/whatsapp/sms/email/chat/ussd. Lifecycle: pending → active → wrapup → completed|failed|canceled (guarded; illegal moves answer 409 with the allowed set).\n\n⚠ Live wire contract note: this build binds request/response fields to the Go struct names, so the create body uses underscore-less keys (`customerid`, `conversationid`, …) and records serialize as `ID`/`Status`/… — diverging from api/openapi/orvexa-v1.yaml. The requests below pin the live behavior; see docs/api-clients.md.",
+      "item": [
+        {
+          "name": "Create interaction (auto-opens conversation)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerid\": \"{{customer_id}}\",\n  \"channel\": \"chat\",\n  \"direction\": \"inbound\",\n  \"source\": \"web\",\n  \"destination\": \"support\",\n  \"provider\": \"internal\"\n}"
+            },
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/interactions", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "interactions"] },
+            "description": "Inbound + no conversationid → find-or-open the customer's open conversation for the channel. Externally-triggered creates should carry `idempotencykey` (pattern ^[A-Za-z0-9._:-]{8,128}$) so replays are single-effect."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201 Created\", () => pm.response.to.have.status(201));",
+                  "const d = pm.response.json().data || {};",
+                  "if (d.ID || d.id) {",
+                  "  pm.collectionVariables.set(\"interaction_id\", d.ID || d.id);",
+                  "  pm.collectionVariables.set(\"tenant_id\", d.TenantID || d.tenant_id || \"\");",
+                  "  pm.test(\"interaction id captured\", () => pm.expect(d.ID || d.id).to.be.a(\"string\"));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get interaction",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/interactions/{{interaction_id}}", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "interactions", "{{interaction_id}}"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Transition (pending → active)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"active\"\n}"
+            },
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/interactions/{{interaction_id}}/transition", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "interactions", "{{interaction_id}}", "transition"] },
+            "description": "to ∈ pending|active|wrapup|completed|failed|canceled. Illegal moves → 409 with error.details.allowed."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Assign agent/queue",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"agent_id\": \"{{agent_id}}\"\n}"
+            },
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/interactions/{{interaction_id}}/assign", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "interactions", "{{interaction_id}}", "assign"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Agents",
+      "description": "Human agent registry, skills and presence (available|busy|wrapup|offline).",
+      "item": [
+        {
+          "name": "Register agent (journey: billing specialist)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"external_identity\": \"amara@acme\",\n  \"display_name\": \"Amara\",\n  \"language\": \"sw\",\n  \"skills\": [{ \"skill\": \"billing\", \"level\": 4 }]\n}"
+            },
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/agents", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "agents"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201 Created\", () => pm.response.to.have.status(201));",
+                  "const d = pm.response.json().data || {};",
+                  "if (d.id) {",
+                  "  pm.collectionVariables.set(\"agent_id\", d.id);",
+                  "  pm.test(\"agent id captured\", () => pm.expect(d.id).to.be.a(\"string\"));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Set presence (available)",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"available\"\n}"
+            },
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/agents/{{agent_id}}/presence", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "agents", "{{agent_id}}", "presence"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Read presence",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/agents/{{agent_id}}/presence", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "agents", "{{agent_id}}", "presence"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List agents",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{ORVEXA_URL}}/api/v1/agents",
+              "host": ["{{ORVEXA_URL}}"],
+              "path": ["api", "v1", "agents"],
+              "query": [{ "key": "cursor", "value": "", "disabled": true }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get agent",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/agents/{{agent_id}}", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "agents", "{{agent_id}}"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200 OK\", () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data || {};",
+                  "pm.test(\"same agent id\", () => pm.expect(d.id).to.eql(pm.collectionVariables.get(\"agent_id\")));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Queues",
+      "description": "Routing queues with priority, SLA and required skills.",
+      "item": [
+        {
+          "name": "Create queue",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Billing Tier 1\",\n  \"description\": \"First-line billing support\",\n  \"priority\": 5,\n  \"sla_seconds\": 60,\n  \"skills\": [\"billing\"]\n}"
+            },
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/queues", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "queues"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201 Created\", () => pm.response.to.have.status(201));",
+                  "const d = pm.response.json().data || {};",
+                  "if (d.id) {",
+                  "  pm.collectionVariables.set(\"queue_id\", d.id);",
+                  "  pm.test(\"queue id captured\", () => pm.expect(d.id).to.be.a(\"string\"));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List queues",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{ORVEXA_URL}}/api/v1/queues",
+              "host": ["{{ORVEXA_URL}}"],
+              "path": ["api", "v1", "queues"],
+              "query": [{ "key": "cursor", "value": "", "disabled": true }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get queue",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/queues/{{queue_id}}", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "queues", "{{queue_id}}"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Cases",
+      "description": "Case lifecycle: open → in_progress → pending_customer → resolved → closed (+ reopen from resolved; canceled). Serialized per-tenant reference, notes, interaction links.",
+      "item": [
+        {
+          "name": "Open case (journey: billing dispute)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": \"{{customer_id}}\",\n  \"subject\": \"Billing dispute\",\n  \"priority\": \"normal\",\n  \"description\": \"Customer disputes the March invoice\"\n}"
+            },
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/cases", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "cases"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201 Created\", () => pm.response.to.have.status(201));",
+                  "const d = pm.response.json().data || {};",
+                  "if (d.id) {",
+                  "  pm.collectionVariables.set(\"case_id\", d.id);",
+                  "  pm.test(\"case id captured\", () => pm.expect(d.id).to.be.a(\"string\"));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add note",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"author_type\": \"agent\",\n  \"author_id\": \"{{agent_id}}\",\n  \"body\": \"Checked with the billing team — invoice is being corrected.\",\n  \"internal\": true\n}"
+            },
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/cases/{{case_id}}/notes", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "cases", "{{case_id}}", "notes"] },
+            "description": "author_type ∈ agent|ai_agent|system; body ≤ 8000 chars."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201 Created\", () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List notes",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{ORVEXA_URL}}/api/v1/cases/{{case_id}}/notes",
+              "host": ["{{ORVEXA_URL}}"],
+              "path": ["api", "v1", "cases", "{{case_id}}", "notes"],
+              "query": [{ "key": "cursor", "value": "", "disabled": true }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Link interaction",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/cases/{{case_id}}/interactions/{{interaction_id}}/link", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "cases", "{{case_id}}", "interactions", "{{interaction_id}}", "link"] },
+            "description": "204 No Content on success. Links the chat interaction captured in the Interactions folder — swap `{{interaction_id}}` for `{{call_id}}` to link the voice call instead."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 204 Linked\", () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Transition (open → in_progress)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"to\": \"in_progress\",\n  \"reason\": \"investigating\"\n}"
+            },
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/cases/{{case_id}}/transition", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "cases", "{{case_id}}", "transition"] },
+            "description": "to ∈ open|in_progress|pending_customer|resolved|closed|canceled; closed is terminal; reopen is legal from resolved."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get case",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/cases/{{case_id}}", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "cases", "{{case_id}}"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List cases",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{ORVEXA_URL}}/api/v1/cases",
+              "host": ["{{ORVEXA_URL}}"],
+              "path": ["api", "v1", "cases"],
+              "query": [{ "key": "cursor", "value": "", "disabled": true }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Calls",
+      "description": "Outbound telephony. PlaceCall creates a pending voice interaction and hands the leg to the provider (simulator by default); lifecycle progress arrives as signed provider webhooks.",
+      "item": [
+        {
+          "name": "Place outbound call (journey)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": \"{{customer_id}}\",\n  \"to\": \"+254712345678\"\n}"
+            },
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/calls", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "calls"] },
+            "description": "Returns immediately (201) — ringing/connected/ended arrive via signed webhooks. The simulator delivers the full loop locally."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201 Created\", () => pm.response.to.have.status(201));",
+                  "const d = pm.response.json().data || {};",
+                  "if (d.ID || d.id) {",
+                  "  pm.collectionVariables.set(\"call_id\", d.ID || d.id);",
+                  "  pm.test(\"call id captured\", () => pm.expect(d.ID || d.id).to.be.a(\"string\"));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Action: hangup",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"hangup\"\n}"
+            },
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/calls/{{call_id}}/actions", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "calls", "{{call_id}}", "actions"] },
+            "description": "action ∈ answer|hangup|transfer|hold|resume|complete. transfer needs `destination`."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Action: complete",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"complete\"\n}"
+            },
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/calls/{{call_id}}/actions", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "calls", "{{call_id}}", "actions"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Messages",
+      "description": "Outbound messaging (whatsapp|sms|email) — creates the outbound interaction and hands delivery to the provider.",
+      "item": [
+        {
+          "name": "Send SMS (journey)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": \"{{customer_id}}\",\n  \"channel\": \"sms\",\n  \"from\": \"orvexa-sms\",\n  \"to\": \"+254712345678\",\n  \"body\": \"Your ticket is resolved. Reply STOP to opt out.\"\n}"
+            },
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/messages", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "messages"] },
+            "description": "`from` is optional in api/openapi/orvexa-v1.yaml but required by this build (endpoints check) — include it. body ≤ 4096 chars; media_urls for MMS-style sends."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201 Created\", () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Routing",
+      "description": "Deterministic routing engine: score candidates (skills coverage, presence, priority), record immutable decisions.",
+      "item": [
+        {
+          "name": "Route interaction (journey)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"required_skills\": [\"billing\"],\n  \"priority\": 5\n}"
+            },
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/routing/interactions/{{interaction_id}}", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "routing", "interactions", "{{interaction_id}}"] },
+            "description": "Returns the decision (agent/queue/fallback outcome). Decisions are deterministic — same inputs, same answer."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List decision records",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{ORVEXA_URL}}/api/v1/routing/decisions?interaction_id={{interaction_id}}",
+              "host": ["{{ORVEXA_URL}}"],
+              "path": ["api", "v1", "routing", "decisions"],
+              "query": [
+                { "key": "interaction_id", "value": "{{interaction_id}}" },
+                { "key": "cursor", "value": "", "disabled": true }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "AI",
+      "description": "Governed AI: one metered turn per invoke (advisory suggestions only), tool execution through the allowlist gateway (schema + rate + audit).",
+      "item": [
+        {
+          "name": "Get AI agent view",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/ai/agents/{{agent_id}}", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "ai", "agents", "{{agent_id}}"] },
+            "description": "Runtime view of the agent configuration (model hint, tool limits, policies)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Invoke (one governed turn)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"interaction_id\": \"{{interaction_id}}\",\n  \"user_message\": \"What is my balance?\",\n  \"facts\": { \"plan\": \"pilot\" }\n}"
+            },
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/ai/agents/{{agent_id}}/invoke", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "ai", "agents", "{{agent_id}}", "invoke"] },
+            "description": "Metered: token usage is counted and clamped to the configured cap. Suggestions are advisory — never auto-executed."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200 OK\", () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data || {};",
+                  "pm.test(\"outcome present\", () => pm.expect(d.outcome).to.be.a(\"string\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Execute tool (governed)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"Tool\": \"get_customer\",\n  \"InteractionID\": \"{{interaction_id}}\",\n  \"Args\": { \"customer_id\": \"{{customer_id}}\" }\n}"
+            },
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/ai/agents/{{agent_id}}/tools", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "ai", "agents", "{{agent_id}}", "tools"] },
+            "description": "⚠ Live wire contract note: the tool-call body binds to Go field names in this build (`Tool`/`InteractionID`/`Args`; `tool`/`args` also match case-insensitively, but snake_case `interaction_id` does not) — diverging from the OpenAPI enum block. Allowlist: get_customer | create_case | send_whatsapp. 403 when not allowed, 429 when rate-capped; refusals are audited."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200 OK\", () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data || pm.response.json();",
+                  "pm.test(\"tool echoed\", () => pm.expect([d.tool, d.Tool]).to.include(\"get_customer\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Workflows",
+      "description": "Durable workflow executions (callback ladder, collections ladder). Instances are resumable and cancelable.",
+      "item": [
+        {
+          "name": "Start callback workflow (journey)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": \"{{customer_id}}\",\n  \"phone\": \"+254712345678\",\n  \"notes\": \"dispute follow-up\"\n}"
+            },
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/workflows/callbacks", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "workflows", "callbacks"] },
+            "description": "schedule_at optional (RFC3339) — omitted means start immediately/at the first rung."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201 Created\", () => pm.response.to.have.status(201));",
+                  "const d = pm.response.json().data || {};",
+                  "if (d.id) {",
+                  "  pm.collectionVariables.set(\"workflow_id\", d.id);",
+                  "  pm.test(\"workflow id captured\", () => pm.expect(d.id).to.be.a(\"string\"));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get workflow instance",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/workflows/{{workflow_id}}", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "workflows", "{{workflow_id}}"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Start collections ladder",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": \"{{customer_id}}\",\n  \"invoice_ref\": \"INV-2026-0001\",\n  \"amount_due\": 1500,\n  \"phone\": \"+254712345678\"\n}"
+            },
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/workflows/collections", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "workflows", "collections"] }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201 Created\", () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cancel workflow",
+          "request": {
+            "method": "POST",
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/workflows/{{workflow_id}}/cancel", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "workflows", "{{workflow_id}}", "cancel"] },
+            "description": "409 when the instance is not cancelable (already terminal)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Analytics",
+      "description": "Facts aggregation (PostgreSQL by default, ClickHouse when configured).",
+      "item": [
+        {
+          "name": "Summary (journey)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{ORVEXA_URL}}/api/v1/analytics/summary",
+              "host": ["{{ORVEXA_URL}}"],
+              "path": ["api", "v1", "analytics", "summary"],
+              "query": [
+                { "key": "from", "value": "", "disabled": true, "description": "RFC3339; window bounded to 30 days" },
+                { "key": "to", "value": "", "disabled": true }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200 OK\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Search",
+      "description": "Full-text conversation search over the OpenSearch read model. Degradation principle: a search outage never blocks the hot path.",
+      "item": [
+        {
+          "name": "Search conversations",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{ORVEXA_URL}}/api/v1/search/conversations?q=help&limit=25",
+              "host": ["{{ORVEXA_URL}}"],
+              "path": ["api", "v1", "search", "conversations"],
+              "query": [
+                { "key": "q", "value": "help", "description": "Simple query string over projected search text, customer and channel (1–256 chars)" },
+                { "key": "limit", "value": "25", "description": "Server-capped at 50" }
+              ]
+            },
+            "description": "200 hits (eventually consistent) — or the typed degradation: 503 `search.not_configured` (backend unset) / `search.unavailable` (backend down). Tenant scope is enforced server-side from the API key."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200 or typed 503 degradation\", () => pm.expect([200, 503]).to.include(pm.response.code));",
+                  "if (pm.response.code === 503) {",
+                  "  pm.test(\"degradation is typed\", () => pm.expect([\"search.not_configured\", \"search.unavailable\"]).to.include(pm.response.json().error.code));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Identity",
+      "description": "OIDC login surface ([O-29]). Mounted ONLY when ORVEXA_OIDC_* is configured; otherwise the routes answer 404 `identity.disabled`. Public — no API key.",
+      "item": [
+        {
+          "name": "Authorize URL bootstrap",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/identity/authorize-url", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "identity", "authorize-url"] },
+            "description": "200 {authorize_url, state, nonce, expires_in, redirect_uri} when the identity plane is configured. NOTE: on a deployment without OIDC the route is not mounted and the raw 404 body is the router's plain-text `404 page not found` (not the JSON error envelope)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200 or 404 (identity plane disabled)\", () => pm.expect([200, 404]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Callback (code exchange)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{ORVEXA_URL}}/api/v1/identity/callback?code=&state=",
+              "host": ["{{ORVEXA_URL}}"],
+              "path": ["api", "v1", "identity", "callback"],
+              "query": [
+                { "key": "code", "value": "", "description": "Authorization code from the IdP redirect" },
+                { "key": "state", "value": "", "description": "State issued by authorize-url" }
+              ]
+            },
+            "description": "State validation → code exchange → ID-token verification → tenant-scoped principal info. Drive this through a real IdP redirect; direct calls answer 401/404."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200, 401 or 404\", () => pm.expect([200, 401, 404]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Webhooks",
+      "description": "Public provider ingress: POST /api/v1/webhooks/{provider}. Signature required (fail-closed), single-effect dedup on the raw body, IP-rate-limited. The pre-request script computes BOTH the payload and its platform signature — exactly what scripts/e2e-demo.sh does with openssl:\n\n    SIG=$(printf '%s' \"$BODY\" | openssl dgst -sha256 -hmac \"$ORVEXA_SECRET\" -hex | awk '{print $2}')\n\nProviders with a registered verifier (twilio, whatsappcloud, africastalking) are validated by their carrier scheme instead — see docs/runbooks/operations.md § Webhook signatures.\n\nJourney note: run the Interactions folder first — the signed event references an existing `interaction_id` (the provider contract drives an existing interaction's lifecycle).",
+      "item": [
+        {
+          "name": "Signed provider webhook (platform scheme)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Orvexa-Signature", "value": "{{webhook_sig}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{{webhook_body}}" },
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/webhooks/whatsapp_cloud", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "webhooks", "whatsapp_cloud"] },
+            "description": "The pre-request script builds `{event, interaction_id, tenant_id, detail}` and signs the EXACT raw bytes: `X-Orvexa-Signature = hex(HMAC-SHA256(ORVEXA_SECRET, body))`. A one-byte body change rejects. 202 accepted on first delivery."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Build the provider payload against the CURRENT interaction, then",
+                  "// sign the exact raw bytes with the shared HMAC secret",
+                  "// (= scripts/e2e-demo.sh: openssl dgst -sha256 -hmac \"$ORVEXA_SECRET\").",
+                  "const body = JSON.stringify({",
+                  "  event: \"message.delivered\",",
+                  "  interaction_id: pm.collectionVariables.get(\"interaction_id\") || \"\",",
+                  "  tenant_id: pm.collectionVariables.get(\"tenant_id\") || \"\",",
+                  "  detail: \"delivered to handset\"",
+                  "});",
+                  "pm.collectionVariables.set(\"webhook_body\", body);",
+                  "pm.collectionVariables.set(\"webhook_sig\",",
+                  "  CryptoJS.HmacSHA256(body, pm.collectionVariables.get(\"ORVEXA_SECRET\") || \"\").toString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 202 Accepted\", () => pm.response.to.have.status(202));",
+                  "const j = pm.response.json();",
+                  "if (j.event_id) {",
+                  "  pm.collectionVariables.set(\"webhook_event_id\", j.event_id);",
+                  "  pm.test(\"event id captured\", () => pm.expect(j.event_id).to.be.a(\"string\"));",
+                  "}",
+                  "pm.test(\"processed truthfully\", () => pm.expect(j.processed).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Replay the same delivery (single-effect)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Orvexa-Signature", "value": "{{webhook_sig}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{{webhook_body}}" },
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/webhooks/whatsapp_cloud", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "webhooks", "whatsapp_cloud"] },
+            "description": "The idempotency key is derived from the raw body: the replay returns the ORIGINAL event id with `duplicate: true` (HTTP 200) and applies no second effect."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200 (idempotent replay)\", () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.test(\"duplicate flagged\", () => pm.expect(j.duplicate).to.eql(true));",
+                  "pm.test(\"same event id replayed\", () => pm.expect(j.event_id).to.eql(pm.collectionVariables.get(\"webhook_event_id\")));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unsigned delivery is rejected (fail-closed)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"event\":\"message.delivered\"}" },
+            "url": { "raw": "{{ORVEXA_URL}}/api/v1/webhooks/whatsapp_cloud", "host": ["{{ORVEXA_URL}}"], "path": ["api", "v1", "webhooks", "whatsapp_cloud"] },
+            "description": "Negative test: no signature header → 401 `webhook.invalid_signature`, nothing persisted. The gateway never opens an unsigned ingestion path."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 401 Unauthorized\", () => pm.response.to.have.status(401));",
+                  "pm.test(\"typed rejection\", () => pm.expect(pm.response.json().error.code).to.eql(\"webhook.invalid_signature\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
