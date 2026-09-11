@@ -59,6 +59,8 @@ Corroboration: `.gitignore` covers `.env`/`.env.*` with `!.env.example` (verifie
 
 **Triage of the reachable finding (GO-2026-5004), stated honestly:** all Orvexa SQL uses the extended protocol with parameterized placeholders (`$1…$n` bound args — verified at the cited call site); the vulnerable `sanitize.SanitizeSQL` path is exercised only by query-string interpolation, which this codebase never performs. govulncheck reachability is static call-graph reachability, not proven exploitability. **Nevertheless, a SQL-injection-class finding with a same-major patch available does not ride a public repo.** go.mod is outside D1's exclusive file set, so the bump is filed as [#81] with the exact change and the verdict below is BLOCKED until it lands.
 
+> **§7 status updates from the [#49] re-verification (2026-09-11):** R1 **resolved** ([#81] merged pre-wave; see §9) · R5 **resolved** ([#59] fixed — replay returns the derived event id, re-proven live, §9) · R2/R3/R4/R6/R7 stand as written · x/crypto module-level findings unchanged (§9).
+
 ## 3. Security headers — every route (fixed in this PR)
 
 **Proven gap on `6459bc5`:** `httpx.SecurityHeaders` set `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, `Cache-Control` — but **no `Content-Security-Policy` and no `Strict-Transport-Security`**. Fixed in `internal/platform/httpx/middleware.go` (owned file) and pinned by tests.
@@ -185,6 +187,118 @@ Architecture contract: authentication → signature validation → deduplication
 
 ---
 
-## VERDICT: PUBLIC-READY — remediation #81 merged (pgx v5.11.0 / chi v5.3.2); govulncheck re-run 2026-09-11: 0 reachable vulnerabilities; secret scan clean; headers + rate-limit matrices complete.
+## VERDICT (2026-09-10, #39): PUBLIC-READY — remediation #81 merged (pgx v5.11.0 / chi v5.3.2); govulncheck re-run 2026-09-11: 0 reachable vulnerabilities; secret scan clean; headers + rate-limit matrices complete.
 
 Everything else the gate covers is green and evidenced: zero actionable secrets (scanner shipped, canary-validated), headers complete with tests, rate-limit matrix complete with server-side keying proven, webhook ingress fail-closed with adversarial test evidence. The single blocking item is a routine, same-major dependency bump outside this agent's file ownership.
+
+---
+
+# 9. Re-verification on FINAL main — adversarial pass (issue [#49], 2026-09-11)
+
+**Task:** issue [#49] ([O-40]) · **Agent:** E2 (Security Engineer, final adversarial review)
+**Base:** FINAL main @ `283aed5` (post waves A–E, all remediation PRs merged) · **Branch:** `security/final-verify`
+**Method:** re-prove the §1–§8 verdict mechanically on final main; black-box adversarial spot-checks against the wired stack; no new security features; scope = this doc + `scripts/security-scan.sh` (extension forced by a proven new finding, below).
+
+## 9.1 Gate outputs (re-run, captured)
+
+| Gate | Command | Result on final main |
+|---|---|---|
+| Secret scan | `bash scripts/security-scan.sh` | **First run: exit 1 — 3 actionable C9 findings (NEW, see 9.2). After the scanner extension: CLEAN, exit 0** (340 tracked files; C8 34/34 allowlisted, C12 9/9, C9 44/44) |
+| Canary re-validation | planted credential in a temp tracked file | **exit 1, actionable hit** — detector is not a no-op |
+| Dependency audit | `govulncheck ./...` (govulncheck@latest) | **0 symbol-level · 0 package-level · 4 module-level** (GO-2026-6355, -6354, -6303, -5932 — all `golang.org/x/crypto` v0.54.0, all previously triaged unreachable: `ssh`/`openpgp` imported nowhere; no fix exists for -5932). GO-2026-5004/5777/5775 **gone** since the [#81] bumps |
+| Authz matrix | `go test -race -count=1 -tags=authz ./tests/authz/` | **exit 0** — 153 probes: 135 PASS · 2 PASS (degraded) · **14 PASS-SECURED** · **0 DEFECT · 0 FAIL**; `tests/authz/MATRIX.md` regenerated in-tree @ `fa8c569` |
+| Focused -race | `go test -race ./internal/{webhooks,identity,platform/httpx}/...` | **PASS** (all three) |
+| Full matrix | `go test -race ./...` | **exit 0 — 35 packages ok, 0 failures** (was 31 at [#39]; growth = new waves' suites) |
+| Formatting / static / build | `gofmt -l .` / `go vet ./...` / `go build ./...` | **empty / clean / clean** |
+| Marker guard | `make lint-todos` | **clean** |
+| TODO/FIXME sweep | grep over `*.go` non-test | **0 hits** (new sprint code introduced none) |
+
+## 9.2 NEW finding & scanner extension (the re-verification earning its keep)
+
+The first scan on final main went **RED (exit 1)**: the committed evidence pack
+`qa/evidence/2026-09-11/10-security-scan.txt` embeds the *verbatim output of an earlier scan
+run*; the evidence-file paths quoted inside that transcript (`qa/evidence/…/demo-loop-*.txt:N`)
+are ≥40-char high-entropy tokens that no structural filter covered — three **self-referential
+actionable hits**. Not a secret leak (secrets are redacted at source by design), but a live
+gate defect that would block every future CI-equivalent run once evidence packs embed scan
+transcripts — and would tempt someone into a blanket evidence skip, the exact thing the
+allowlist policy forbids.
+
+**Fix (this PR, `scripts/security-scan.sh`):** one narrow justified rule — a C9 token on a
+`qa/evidence/**` line shaped like a scanner finding (`[C\d+ …]` prefix + redaction ellipsis)
+is allowlisted as *scanner-output transcript (self-referential, redacted at source)*. It
+cannot carry a full secret **by construction** (the scanner prints first-10-chars only). The
+token detectors C1–C8/C12 remain unfiltered on every evidence line — a real secret pasted
+into an evidence file is still flagged. Canary re-validated post-change (planted credential →
+exit 1). Rule printed in the scanner's filter footer for every future reviewer.
+
+## 9.3 Authz matrix re-run — P0/P3 remediations re-proven (O-31 harness, untouched)
+
+All ratchet rows re-verified **secured** at `fa8c569` (14 PASS-SECURED, 0 DEFECT observed):
+
+| Row class | Defect | Secure behavior re-observed |
+|---|---|---|
+| REF-1…REF-6 (cross-tenant reference-in-body) | D1 #92 (interactions/calls/messages), D2 #93 (cases), D6 #97 (workflows callbacks/collections) | **404** on foreign `customer_id` |
+| R24 + cross-tenant write-IDOR | D3 #94 (notes on foreign case) | **404** |
+| R26 | D4 #95 (link into foreign case) | **404** |
+| R30 | D5 #96 (routing decision anchored to foreign interaction) | **404** |
+| DEF-1 (2nd ref-less create) | D7 #90 | **201** (no false 409) |
+| R9, R25, IDW-3 (**404-consistency**) | D8 **#98** | **404** — sub-resource LIST on a foreign parent no longer answers 200+empty; canonical with GET-of-parent |
+| R28 leg (**typed 409**) | D9 **#99** | **409** typed app error — hold/resume on an unplaced leg no longer surfaces the provider error as 500 `internal.error` |
+
+## 9.4 Adversarial spot-checks — black-box against the wired stack
+
+Scripted probe run (bash+curl+openssl, executed from `/tmp` only — per scope, committed
+coverage stays with the owning packages' pinned unit tests, cited below). Stack: real
+devstack PG (55439) + `cmd/api` in the documented harness posture (API-key-only auth,
+inproc bus, legacy `X-Orvexa-Signature` verifier path — `cmd/api` installs no per-provider
+verifiers; they are opt-in per deployment and covered by the registry attack-matrix tests).
+
+| # | Adversarial probe | Observed | Committed pin |
+|---|---|---|---|
+| A1 | Webhook **replay**: same signed payload ×2 (seeded tenant, real interaction, `message.delivered`) | 1st: **202** `duplicate=false, processed=true` → 2nd: **200 `duplicate=true`**, **same derived event id** — single effect; the [#59] row-id contract fix is live | `gateway_test.go` dedupe suite |
+| A2 | Replay status contract | 200-on-duplicate / 202-on-new is the documented `v1.go` behavior (intentional; carriers retry non-2xx only on failures) | — |
+| A3 | **Tampered body** with signature bound to original bytes | **401** `webhook.invalid_signature` | `TestSignatureRejectsTamperedBody` |
+| A4 | **Tampered signature** (garbage prefix) | **401** | `TestIngestHeadersGuardrailsBeforeAuth` |
+| A5 | **Missing signature** | **401** (fail-closed; empty-secret/unsigned ingestion impossible) | `TestSignatureRejectsWrongSecretAndEmptySecret` |
+| A6 | Unregistered provider path (`twilio`, no verifier installed in dev wiring) | **401** — legacy timing-safe check, never an open door | `TestGatewayVerifierRoutingAndLegacyFallback` |
+| A7 | **Per-provider verifiers** (Twilio/WA/AT): replay+tamper shapes incl. empty-token fail-closed, hex-case, truncated digest, first/last-byte-flip, forged XFF on a non-compliant edge, internal-URL reconstruction | all reject as recorded in §5 | `TestAttackMatrix` (tw-*/wa-*/at-*), `verify_twilio_test.go`, `verify_whatsappcloud_test.go`, `verify_africastalking_test.go` |
+| A8 | **OIDC forged tokens**: `alg=none`, **HS256 with attacker secret**, **HS256 RSA-public-key confusion** (classic RS256 verifier attack), tampered sig, wrong iss/aud, expired, nbf, missing exp, missing/unknown kid, empty subject, garbage/empty token | **all 401 `identity.invalid_token`** with the expected failure reason (control token verifies) — alg confusion is structurally impossible (verify pins RS256 + signature-verified kid lookup) | `TestVerifyForgeryMatrix`, `TestDualAuthForgedJWTIsFinal` (a forged JWT is final — never retried as an API key) |
+| A9 | **Security headers on chi-native 404** (unknown route) | **all 7 present** (CSP `default-src 'none'`, HSTS, XCTO, XFO, Referrer-Policy, Permissions-Policy, `Cache-Control: no-store`) | `TestSecurityHeadersOnEveryResponse` |
+| A10 | **Security headers on chi-native 405** (GET on POST-only public route) | **all 7 present** | `TestSecurityHeadersOnErrorAndPanicPaths` |
+| A11 | Nuance: unauthenticated wrong-method on an **authed** route | **401** (auth middleware precedes method disclosure — fail-safe direction; no route enumeration for unauthenticated callers) | — |
+| A12 | **Webhook route rate limit**: 70-request burst from one socket | first ~55 pass (422s: unknown-event bodies — limiter runs **before** handler), then **15 × 429 with `Retry-After`**, token-bucket refill visible mid-flood; **all 7 headers present on the 429 path** | `internal/platform/httpx` limiter suite; wiring `v1.go:72` (`NewRateLimit(120, 60, 10_000)`) |
+| A13 | Limiter key spoofability | key = parsed socket `RemoteAddr` (`clientIP()`), chi `RealIP` unused — XFF cannot rotate buckets | §4 analysis, unchanged on final main |
+
+## 9.5 Router enumeration re-check
+
+`internal/httpserver/v1.go` route census unchanged in kind: 23 POST + 1 PUT mutation routes,
+all inside the authed group under the per-principal limiter (600/min, burst 120, key
+`principal.APIKeyID` / `oidc:<sub>`); webhook ingress keeps its dedicated limiter (120/min,
+burst 60, key = socket peer). The three public GETs (`authorize-url`, `callback`, health)
+remain read-only and un-limited — R4 stands (documented residual, not a mutation surface).
+
+## 9.6 Residual risks after re-verification (blockers list: EMPTY)
+
+| # | Item | Class | Disposition after #49 |
+|---|---|---|---|
+| R1 | ~~GO-2026-5004 pgx bump~~ | dependency | **RESOLVED** — [#81] merged (pgx v5.11.0 / chi v5.3.2); govulncheck 0 reachable on final main |
+| R2 | GO-2026-5932 (`x/crypto/openpgp` unmaintained, no fix) + GO-2026-6355/-6354/-6303 (`x/crypto/ssh`, fixed ≥ v0.55/0.56) | dependency (module-level, **unreachable** — `ssh`/`openpgp` imported nowhere) | accepted residual; `go.mod` is outside E2's file set — a routine `x/crypto` bump is hygiene, not a blocker; re-triage on any new import |
+| R3 | Webhook limiter single bucket per edge-proxy IP | design trade-off (fail-safe) | unchanged, documented in v1.go |
+| R4 | Public identity GETs + health un-limited | hardening backlog | unchanged (read-only) |
+| R5 | ~~Replay response contract~~ | correctness | **RESOLVED** — [#59] closed; derived event id returned on replay, re-proven live (A1) |
+| R6 | Packages without test files | coverage | [#57] pre-tracked (full matrix grew 31 → 35 ok packages) |
+| R7 | Env-contract drift | ops hygiene | [#82] pre-tracked (closed by later waves' env sync) |
+| R8 | **#103 status**: simulator internal receipts were ledger-only | lifecycle | **RESOLVED** — [#103] closed by #109 (provider-events consumer ships with the worker; simulator receipts advance the outbound lifecycle; e2e evidence in `qa/evidence/2026-09-11/`) |
+| R9 | AT allowlist unconfigured = allow + WARN on every acceptance | honest residual (AT signs nothing) | unchanged; documented in §5, structurally WARN-logged |
+| R10 | Security posture is config-dependent in production (verifiers optional, TLS at edge, OIDC optional) | deployment contract | documented posture: fail-closed defaults everywhere (no verifiers → legacy fail-closed; no OIDC env → identity plane absent → 404) |
+
+## VERDICT (2026-09-11, #49 re-verification): PUBLIC-READY — RE-PROVEN on FINAL main (`283aed5`).
+
+Zero unmitigated highs: govulncheck 0 reachable · secret scan CLEAN after the §9.2 extension
+(canary-validated, exit 1 on planted secrets) · authz matrix 153 probes with 0 DEFECT / 0 FAIL
+and all 14 ratchet rows SECURED (D1–D6, #90, **#98 404-consistency**, **#99 typed 409**) ·
+adversarial pass green (webhook replay/tamper per provider path, OIDC alg-none + HS256
+confusion rejected, headers on 404/405, webhook rate-limit 429 + Retry-After) · no new
+secrets or TODO/FIXME markers · full -race matrix 35/35 packages green. Blockers list:
+**empty**. Remaining items R2–R4, R6, R9, R10 are documented, non-blocking, and monitored.
