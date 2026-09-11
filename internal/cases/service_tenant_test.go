@@ -224,3 +224,45 @@ func TestAddNoteOwnTenantCaseStillSucceeds(t *testing.T) {
 		t.Fatalf("own note not listable: %v (%d)", err, len(notes))
 	}
 }
+
+// TestLinkInteractionRejectsForeignCase pins #95 (MAT-D4): linking an OWN
+// interaction into a FOREIGN case must 404 — the case side is now scoped too.
+// The interaction-side scope (own case + foreign interaction → 404) is pinned
+// as well to prove the fix did not loosen either direction.
+func TestLinkInteractionRejectsForeignCase(t *testing.T) {
+	h := newCaseTenantHarness(t)
+	ctx := context.Background()
+
+	caseA, err := h.svc.Open(ctx, h.tenantA, CreateInput{CustomerID: h.custA, Subject: "case A"})
+	if err != nil {
+		t.Fatalf("seed case A: %v", err)
+	}
+	interA := h.seedInteraction(t, h.tenantA, h.custA, "cs-a")
+	interB := h.seedInteraction(t, h.tenantB, h.custB, "cs-b")
+
+	// tenant-B interaction into tenant-A case: the #95 write-IDOR
+	if err := h.svc.LinkInteraction(ctx, h.tenantB, caseA.ID, interB); err == nil {
+		t.Fatal("foreign-case link accepted (204) — #95 not fixed")
+	} else {
+		wantCaseNotFound(t, err, "case.link_target_not_found")
+	}
+
+	var links int
+	if err := h.pool.QueryRow(ctx,
+		`SELECT count(*) FROM case_interactions WHERE case_id = $1`, caseA.ID).Scan(&links); err != nil {
+		t.Fatalf("count links: %v", err)
+	}
+	if links != 0 {
+		t.Fatalf("cross-tenant link persisted: %d rows (want 0)", links)
+	}
+
+	// foreign interaction into OWN case stays rejected (interaction-side scope)
+	if err := h.svc.LinkInteraction(ctx, h.tenantA, caseA.ID, interB); err == nil {
+		t.Fatal("foreign-interaction link accepted — interaction scope loosened")
+	}
+
+	// own case + own interaction keeps working (204 semantics)
+	if err := h.svc.LinkInteraction(ctx, h.tenantA, caseA.ID, interA); err != nil {
+		t.Fatalf("own link rejected: %v", err)
+	}
+}

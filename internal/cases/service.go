@@ -290,10 +290,15 @@ func (s *Service) AddNote(ctx context.Context, tenantID, id, authorType, authorI
 
 // LinkInteraction associates an interaction with a case.
 func (s *Service) LinkInteraction(ctx context.Context, tenantID, caseID, interactionID string) error {
+	// Both sides of the link must belong to the caller's tenant: the
+	// interaction was already scoped, but the CASE was not — a tenant-B key
+	// could link its own interaction into a tenant-A case (204), planting
+	// cross-tenant content in A's case view (#95, MAT-D4).
 	res, err := s.pool.Exec(ctx, `
 		INSERT INTO case_interactions (case_id, interaction_id)
 		SELECT $1, i.id FROM interactions i
 		WHERE i.id = $2 AND i.tenant_id = $3
+			AND EXISTS (SELECT 1 FROM cases c WHERE c.id = $1 AND c.tenant_id = $3)
 		ON CONFLICT DO NOTHING`, caseID, interactionID, tenantID)
 	if err != nil {
 		return apperrors.Internal("db.write_failed", "write failed").WithCause(err)
