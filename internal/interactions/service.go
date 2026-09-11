@@ -148,7 +148,7 @@ func (s *Service) Create(ctx context.Context, tenantID string, in CreateInput) (
                          source, destination, provider, provider_ref, idempotency_key, attributes, started_at)
                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
 		rec.ID, tenantID, rec.ConversationID, rec.CustomerID, rec.Channel, rec.Direction,
-		rec.Status, rec.Source, rec.Destination, rec.Provider, rec.ProviderRef,
+		rec.Status, rec.Source, rec.Destination, rec.Provider, nullStr(rec.ProviderRef),
 		nullStr(rec.IdempotencyKey), rec.Attributes, rec.StartedAt)
 	if isUnique(err) {
 		// duplicate delivery: return the existing interaction (idempotent)
