@@ -10,21 +10,33 @@ import (
 // J2 — outbound messaging journey (issue #43):
 //
 //	outbound SMS via the simulator carrier → provider lifecycle receipts
-//	(message.sent / message.delivered / message.read as SIGNED webhooks through
-//	the public gateway) → delivery-receipt-driven state → analytics summary.
+//	(sent/delivered signed through the internal ingest port; read receipt
+//	delivered as a SIGNED webhook through the PUBLIC gateway) →
+//	receipt-driven state → analytics summary.
 //
 // Failure injections: tampered signature (401 fail-closed) and duplicate
 // replay of the read receipt (dedupe asserted).
 //
-// Contract notes:
+// Contract notes (kept visible so the drift stays fixed upstream):
 //   - interactions.Rec has no JSON tags, so the response body carries Go
 //     field names (data.ID / data.Status) — asserted verbatim here; the
-//     OpenAPI casing drift is tracked upstream.
+//     OpenAPI casing drift is tracked in #101.
+//   - Issue #103 (filed, unfixed): the simulator's INTERNAL sent/delivered
+//     receipts are signed into the provider_events ledger via gateway.Ingest,
+//     but no consumer applies them — activation at step 3 comes from the
+//     messaging service's own queued→sent transition, and completion at
+//     step 7 is driven by the read receipt through the PUBLIC gateway, whose
+//     handler applies the comms processor inline. J2 is therefore NOT blocked
+//     by #103; the demo loop's voice leg needs the same public-gateway
+//     routing (scripts/e2e-demo.sh step 8).
 //   - Issue #90 is routed around by design: the harness gives every journey
 //     its OWN tenant, and J2 sends exactly ONE outbound message — the second
 //     outbound leg per tenant currently fails 409 (empty provider_ref unique
 //     collision), which is a comms/interactions defect outside this wave's
 //     ownership.
+//   - Issue #106 (filed): analytics total_interactions counts lifecycle
+//     events, not distinct interactions (one sms send → total=3, bucket "":2).
+//     The step-8 assertion stays at >=1 until #106 lands, then ratchet to ==1.
 func TestJourney2_OutboundSMS_Receipts_Analytics(t *testing.T) {
 	tn := journeyTenantFor(t, "j2")
 	t.Logf("J2 tenant %s (key %s…)", tn.TenantID, tn.RawKey[:12])
@@ -63,16 +75,18 @@ func TestJourney2_OutboundSMS_Receipts_Analytics(t *testing.T) {
 	}
 	t.Logf("✓ outbound sms interaction %s created (status=%s at response time)", sent.ID, sent.Status)
 
-	// 3. delivery receipts: the simulator emits message.sent + message.delivered
-	//    signed webhooks — the interaction must be active without any operator action.
-	waitFor(t, "simulator sent/delivered receipts to activate the interaction", 15*time.Second, func() (bool, string) {
+	// 3. the send must be active without any operator action: the messaging
+	//    service applies queued→sent synchronously, and the simulator's
+	//    signed sent/delivered receipts land in the provider_events ledger
+	//    (ledger-only until #103 — see contract note above).
+	waitFor(t, "outbound interaction to be active", 15*time.Second, func() (bool, string) {
 		var cur struct {
 			Status string `json:"Status"`
 		}
 		decode(t, doJSON(t, "GET", "/api/v1/interactions/"+sent.ID, tn.RawKey, nil), 200, &cur)
 		return cur.Status == "active", "status=" + cur.Status
 	})
-	t.Log("✓ carrier receipts (message.sent → message.delivered) processed: interaction active")
+	t.Log("✓ interaction active (queued→sent); simulator sent/delivered receipts signed into the ledger (#103: ledger-only)")
 
 	// 4. FAILURE INJECTION — tampered signature on a read receipt: fail-closed 401.
 	readBody := mustJSON(map[string]any{
@@ -112,7 +126,9 @@ func TestJourney2_OutboundSMS_Receipts_Analytics(t *testing.T) {
 	}
 	t.Logf("✓ FAILURE INJECTION (replay): duplicate=true, event_id=%s — single effect", replayRes.EventID)
 
-	// 7. receipt-driven state: message.read moves the interaction to completed
+	// 7. receipt-driven state: the message.read receipt, delivered through
+	//    the PUBLIC webhook gateway (signature-validated, processed inline),
+	//    moves the interaction to completed.
 	waitFor(t, "interaction to complete via message.read", 15*time.Second, func() (bool, string) {
 		var cur struct {
 			Status string `json:"Status"`
@@ -145,6 +161,9 @@ func TestJourney2_OutboundSMS_Receipts_Analytics(t *testing.T) {
 	if summary.Window.To == "" {
 		t.Fatal("analytics summary window missing")
 	}
+	// Known inflation (#106): total counts lifecycle events (one sms send →
+	// total=3 with an empty-channel bucket), so only >=1 is asserted here;
+	// ratchet to total==1 && len(by_channel)==1 once #106 lands.
 	t.Logf("✓ analytics summary: total_interactions=%d by_channel=%v (window %s → %s)",
 		summary.TotalInteractions, summary.InteractionsByChannel, summary.Window.From, summary.Window.To)
 	t.Log("J2 GREEN")
