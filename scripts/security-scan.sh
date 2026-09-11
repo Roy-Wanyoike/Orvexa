@@ -16,7 +16,9 @@
 #   C8  Credential URLs            scheme://userinfo@host (userinfo has ":")
 #   C9  High-entropy strings       >=40 chars, Shannon entropy >= 4.5 bits/char
 #                                  (calibrated against this tree; see
-#                                  docs/security/security-posture.md)
+#                                  docs/security/security-posture.md;
+#                                  re-verified 2026-09-11 in issue #49 —
+#                                  transcript rule added, see allowlist below)
 #   C10 Tracked .env files         tracked path named .env / .env.* (except .env.example)
 #   C11 Secret-named artifacts     *.pem *.key id_rsa credentials*.json *.p12 ...
 #   C12 Generic credential assign  cred-word [=:]"8+ char literal"
@@ -100,8 +102,17 @@ def camel_transitions(s):
 STRUCTURAL = re.compile(
     r"(?:^//|://|github\.com/|golang\.org/|google\.golang\.org/|gopkg\.in/|go\.uber\.org/|"
     r"\.example/|example\.com|\.md$|/go\.mod|orvexa$|orvexa/)", re.IGNORECASE)
+# Scanner-output transcripts (issue #49 re-verification): qa/evidence/** embeds
+# VERBATIM output of earlier scan runs for audit purposes. A line shaped like a
+# finding ("  [C9 …] path:line — justification (redacted…)" ) plus the redaction
+# ellipsis proves the text is the scanner's own already-adjudicated, first-10-chars
+# redacted rendering — it cannot carry a full secret BY CONSTRUCTION (the scanner
+# redacts at source). Rule is narrow: C9 only, qa/evidence/ only, transcript line
+# shape only. Token detectors C1-C8/C12 still fire unfiltered on every evidence
+# line, so a real secret pasted into an evidence file is still flagged.
+TRANSCRIPT_LINE = re.compile(r"^\s*\[C\d+\s[^\]]+\]\s\S.*\u2026")
 
-def allowlisted(path, match, detector):
+def allowlisted(path, match, detector, line=""):
     """Return a justification string when the hit is an explicitly-exempted shape."""
     m = match
     if detector.startswith("C8"):
@@ -117,6 +128,8 @@ def allowlisted(path, match, detector):
     if detector.startswith("C9"):
         if path in ("go.sum", "go.mod"):
             return "public module checksum file (go.sum/go.mod)"
+        if path.startswith("qa/evidence/") and TRANSCRIPT_LINE.match(line):
+            return "scanner-output transcript (self-referential, redacted at source)"
         if "://" in m:
             return "plain URL (credentials-in-URL covered by C8)"
         if "ORVEXA_" in m:
@@ -179,7 +192,7 @@ for f in files:
         for name, rx in DETECTORS:
             for m in rx.finditer(line):
                 tok = m.group(0)
-                findings.append((name, f, i, redact(tok), allowlisted(f, tok, name)))
+                findings.append((name, f, i, redact(tok), allowlisted(f, tok, name, line)))
         if f not in ("go.sum", "go.mod"):
             for m in ENTROPY_RE.finditer(line):
                 tok = m.group(0)
@@ -187,7 +200,7 @@ for f in files:
                 ent = -sum(v / len(tok) * math.log2(v / len(tok)) for v in c.values())
                 if len(tok) >= 40 and ent >= 4.5:
                     findings.append(("C9 High-entropy string", f, i, redact(tok),
-                                     allowlisted(f, tok, "C9")))
+                                     allowlisted(f, tok, "C9", line)))
 
 for name, f, detail in name_findings():
     findings.append((name, f, 0, redact(detail), None))
@@ -218,7 +231,8 @@ print("-" * 78)
 print(f"Files scanned: {files_scanned} of {len(files)} tracked (binary excluded)")
 print("Entropy calibration: >=40 chars, Shannon entropy >= 4.5 bits/char;")
 print("  structural filters: URLs (C8-covered), ORVEXA_* env refs, imports/doc refs,")
-print("  Go test identifiers, golden-fixture dummy hex, go.sum/go.mod checksums.")
+print("  Go test identifiers, golden-fixture dummy hex, go.sum/go.mod checksums,")
+print("  qa/evidence scanner-transcript lines (redacted at source, #49).")
 if allow:
     print("\nAllowlisted hits (each justified, manually reviewed):")
     for name, f, line, red, just in sorted(findings, key=lambda x: (x[0], x[1], x[2])):
