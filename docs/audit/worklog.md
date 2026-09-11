@@ -376,3 +376,44 @@ exit 0 CLEAN (canary exit 1) · `govulncheck ./...` 0 reachable.
 module-level bump is hygiene, go.mod outside E2 ownership; AT allowlist unconfigured = allow+WARN;
 public GETs un-limited; config-dependent production posture is fail-closed by default). No new
 secrets; no credential material in logs/errors/tests (keys minted per run, masked in report).
+
+---
+
+## Wave E3 — QA Lead — issue #50 [O-41]: final production readiness report
+
+**Task:** rewrite `qa/QA_REPORT.md` as the evidence-first PRODUCTION READINESS REPORT; go/no-go
+instrument for pilot onboarding and public visibility.
+**Base:** main @ `494d354` · **Branch:** `qa/final-report` · **Date:** 2026-09-11
+
+**Delivered (exclusive scope: `qa/QA_REPORT.md` + `qa/evidence/2026-09-11/INDEX.md`):**
+
+- **VERDICT: READY WITH APPROVED RISKS — GO for pilot onboarding and public visibility.** All
+  P0/P1/P2 defects fixed and re-proven secured (matrix 153/0/14-SECURED), security PUBLIC-READY
+  re-proven on final main (§9, blockers empty), journeys + demo green, baselines recorded. Three
+  approved residuals quoted in the verdict: #113 cmd wiring (multi-node), Temporal build-tag-gated
+  (by design, ADR-0009), loopback perf floors ("a floor, not a forecast").
+- Six sections per the issue contract: executive summary + verdict; 9 per-area assessments
+  (architecture/backend/data/API/security/AI/observability/docs/git) each evidence-linked;
+  complete issue→PR ledger (foundation #1–#9, production push #20–#52, audit #54–#57, 12 defect
+  fixes with fix-PR + re-proof links, residuals #50/#113); role/permission + authz matrix +
+  journeys + tests + performance + security-scan tables; approved risks (AR-1…AR-6, each
+  what/evidence/mitigation/owner) + known limitations (incl. flagged README staleness: "32 test
+  packages" claim and #89/#90 listed open — both stale vs evidence) + deployment/rollback
+  statements tied to artifacts; final recommendation (pilot GO / public GO, two explicit gates to
+  unqualified READY).
+- **Numbers policy:** zero invented numbers. Re-verified live on 2026-09-11 by the report author:
+  `gofmt -l .` empty, `go vet ./...` clean, `go build ./...` clean, `make lint-todos` clean,
+  `go test -race -count=1 ./...` exit 0 = **35 ok / 0 FAIL / 13 no-test-files**; 40 OpenAPI paths
+  counted; ledger states cross-checked via GitHub API (PR bodies "Closes", issue timelines).
+  All other figures link the committed evidence pack; first-failure artifacts (`.failed-run1`)
+  cited, not hidden.
+- New `qa/evidence/2026-09-11/INDEX.md`: one-line index of the 13 gate artifacts + journeys +
+  closure doc (the pack previously had no entry point).
+- Report is 254 lines (≤600), all 204 relative links script-checked to resolve.
+
+**Verification (CI-equivalent local full matrix, this branch):** `gofmt -l .` empty ·
+`go vet ./...` clean · `go build ./...` clean · `go test -race -count=1 ./...` exit 0 (35 ok) ·
+`make lint-todos` clean · relative-link check: 204/204 resolve · report ≤ 600 lines.
+
+**Risks / follow-ups:** none new. KL-2 (README staleness) flagged for the docs owner — one
+non-blocking sync PR. #113 remains the only open engineering residual (approved risk AR-1).
