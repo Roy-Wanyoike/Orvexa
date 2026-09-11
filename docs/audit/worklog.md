@@ -283,3 +283,51 @@ identity-plane routes are Conditional (fail-closed 404) until OIDC is provisione
 boots the API via `go run` (worked cleanly this run — 0.72s suite — but an in-process httptest
 assembly is the documented follow-up if it ever proves flaky in CI); search routes are
 PASS(degraded) until OpenSearch lands in devstack.
+
+---
+
+## Wave D5e — [O-34]/[O-46] issues #43 + #89: e2e customer-journey suite + e2e-demo.sh upgrade
+
+**Owner:** Agent D5 (Automation/E2E engineer) · **Branch:** `test/e2e-journeys` ·
+**Predecessor state:** 3 commits (J1/J2/J3 suite + seed-compile fix) + dirty `scripts/e2e-demo.sh`
+rework; this session merged origin/main (P0 tenant isolation #105, Postman #102 — clean merge),
+finished, verified and landed the script, and committed evidence.
+
+**Delivered:**
+- Journey suite green on post-#105 main (three runs, latest 011544): `go test -race -tags=e2e
+  ./tests/e2e/` → J1 inbound WhatsApp (resolve → signed webhook → replay dedupe → tamper
+  fail-closed → routing → assignment → wrap-up → case close → conversation close), J2 outbound
+  SMS (send → read receipt through the public gateway → tamper/replay injections → analytics),
+  J3 AI suggest → allowlisted tool call → 403 policy refusal (audited) → audit_events +
+  usage_fact queries. Each journey on its OWN seeded tenant (#90 routing).
+- J2 NOT blocked by #103: `messaging.Service.Send` applies queued→active synchronously and the
+  read receipt is processed inline by the public webhook handler; the simulator's INTERNAL
+  sent/delivered receipts stay ledger-only until #103 (documented in the test's contract notes).
+- `scripts/e2e-demo.sh` (#89) landed: step 4 reworked to a supported lifecycle event
+  (`message.delivered` for the created inbound interaction — the comms vocabulary has no
+  `inbound.whatsapp` and requires interaction_id+tenant_id); jq paths fixed to the real wire
+  casing (`data.ID/Status/TenantID`, #101 drift documented, not "fixed"); replay/dedupe +
+  tamper assertions kept and extended to the voice leg; MANAGED mode boots devstack(55445) +
+  fresh-built api/worker + seeds a fresh tenant (`go run -tags=e2e ./tests/e2e/seed`), runs the
+  12-step loop AND the Go journey suite, prints a scored summary; transcripts →
+  `qa/evidence/<UTC-date>/journeys/*.txt` (.txt because the repo-wide `*.log` gitignore would
+  hide evidence). EXTERNAL mode preserved. `bash scripts/e2e-demo.sh` → exit 0, 12/12 +
+  J1/J2/J3 PASS (three consecutive runs).
+- Defect filed from the green run (NOT fixed here): #106 — analytics `total_interactions`
+  counts lifecycle EVENTS not distinct interactions (one sms send → total=3, bucket `"":2`;
+  transition payloads carry no channel). Tenant scoping verified correct.
+- Evidence committed: `qa/evidence/2026-09-11/journeys/{demo-loop,go-journeys}-011544.txt`.
+
+**Verification (CI-equivalent local full matrix):** `gofmt -l .` empty · `go vet ./...` clean ·
+`go build ./...` clean · `bash -n scripts/e2e-demo.sh` ok · `go test -race ./...` exit 0 ·
+`go test -race -tags=e2e ./tests/e2e/` PASS (3 journeys, 0 skips) · `make lint-todos` clean ·
+`bash scripts/e2e-demo.sh` exit 0 ×3 (fresh devstack each run).
+
+**PR:** "test(e2e): customer journey suite + e2e-demo upgrade (#43)" — Closes #43, Closes #89.
+
+**Risks / follow-ups:** #101 (interactions wire drift) will change the casing/workarounds the
+script and suite intentionally encode — both file the drift in contract notes so the ratchet is
+visible when it lands; #103 (simulator internal receipts ledger-only) leaves the demo loop's
+voice leg dependent on public-gateway callbacks; #106 inflation keeps J2's analytics assertion
+at >=1 (ratchet to ==1 documented); e2e suite still requires the go toolchain + devstack bundle
+(no docker) by design.
