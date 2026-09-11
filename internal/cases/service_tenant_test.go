@@ -23,6 +23,7 @@ import (
 
 	"github.com/Roy-Wanyoike/orvexa/internal/platform/outbox"
 	apperrors "github.com/Roy-Wanyoike/orvexa/pkg/errors"
+	"github.com/Roy-Wanyoike/orvexa/pkg/pagination"
 )
 
 // caseTenantHarness mints two isolated tenants with one customer each via the
@@ -173,5 +174,53 @@ func TestOpenOwnTenantCustomerStillSucceeds(t *testing.T) {
 	}
 	if c.Ref == "" {
 		t.Fatal("per-tenant serial ref missing")
+	}
+}
+
+// TestAddNoteRejectsForeignCase pins #94 (MAT-D3): a note posted with a
+// foreign-tenant case id must 404 and must NOT write into the foreign case
+// timeline.
+func TestAddNoteRejectsForeignCase(t *testing.T) {
+	h := newCaseTenantHarness(t)
+	ctx := context.Background()
+
+	caseA, err := h.svc.Open(ctx, h.tenantA, CreateInput{CustomerID: h.custA, Subject: "case A"})
+	if err != nil {
+		t.Fatalf("seed case A: %v", err)
+	}
+
+	_, err = h.svc.AddNote(ctx, h.tenantB, caseA.ID, "agent", "agent-1", "injected note", true)
+	wantCaseNotFound(t, err, "case.not_found")
+
+	var notes int
+	if err := h.pool.QueryRow(ctx,
+		`SELECT count(*) FROM case_notes WHERE case_id = $1`, caseA.ID).Scan(&notes); err != nil {
+		t.Fatalf("count notes: %v", err)
+	}
+	if notes != 0 {
+		t.Fatalf("cross-tenant note written onto foreign case: %d rows (want 0)", notes)
+	}
+}
+
+// TestAddNoteOwnTenantCaseStillSucceeds preserves the owning tenant's
+// behavior: the note lands and lists back.
+func TestAddNoteOwnTenantCaseStillSucceeds(t *testing.T) {
+	h := newCaseTenantHarness(t)
+	ctx := context.Background()
+
+	caseA, err := h.svc.Open(ctx, h.tenantA, CreateInput{CustomerID: h.custA, Subject: "case A"})
+	if err != nil {
+		t.Fatalf("seed case A: %v", err)
+	}
+	n, err := h.svc.AddNote(ctx, h.tenantA, caseA.ID, "agent", "agent-1", "legit note", true)
+	if err != nil {
+		t.Fatalf("own-tenant add-note failed: %v", err)
+	}
+	if n.CaseID != caseA.ID {
+		t.Fatalf("note anchored to %s (want %s)", n.CaseID, caseA.ID)
+	}
+	notes, _, err := h.svc.ListNotes(ctx, h.tenantA, caseA.ID, pagination.Page{Limit: 50})
+	if err != nil || len(notes) != 1 {
+		t.Fatalf("own note not listable: %v (%d)", err, len(notes))
 	}
 }

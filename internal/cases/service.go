@@ -254,6 +254,19 @@ func (s *Service) AddNote(ctx context.Context, tenantID, id, authorType, authorI
 	if body == "" || len(body) > 8000 {
 		return nil, apperrors.Invalid("case.body_invalid", "note body must be 1-8000 chars")
 	}
+	// The note must land on a case owned by the caller's tenant: the
+	// case_notes insert validated only the case_id FK (global existence), so
+	// a tenant-B key could write arbitrary content into a tenant-A case
+	// timeline — a direct cross-tenant WRITE (#94, MAT-D3).
+	var caseOwned bool
+	if err := s.pool.QueryRow(ctx, `
+			SELECT EXISTS (SELECT 1 FROM cases WHERE id = $1 AND tenant_id = $2)`,
+		id, tenantID).Scan(&caseOwned); err != nil {
+		return nil, apperrors.Internal("db.read_failed", "read failed").WithCause(err)
+	}
+	if !caseOwned {
+		return nil, apperrors.NotFound("case.not_found", "case not found")
+	}
 	n := &Note{
 		ID: uuid.NewString(), CaseID: id, AuthorType: authorType, AuthorID: authorID,
 		Body: body, Internal: internal, CreatedAt: time.Now().UTC(),
