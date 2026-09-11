@@ -1,0 +1,36 @@
+$ scripts/devstack.sh start
+---
+[devstack 2026-09-11T02:20:05Z] downloading https://repo1.maven.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-linux-amd64/16.4.0/embedded-postgres-binaries-linux-amd64-16.4.0.jar (retries=3)
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100 14.0M  100 14.0M    0     0  52.4M      0 --:--:-- --:--:-- --:--:-- 52.6M
+[devstack 2026-09-11T02:20:06Z] sha256 verified OK: 14a5cf546aee7d327a2f5b46be6c571f2f724a2b485c270d46f3e44a1ac3df18  (artifact 16.4.0; verify: curl -fsSL https://repo1.maven.org/maven2/io/zonky/test/postgres/embedded-postgres-binaries-linux-amd64/16.4.0/embedded-postgres-binaries-linux-amd64-16.4.0.jar | sha256sum)
+[devstack 2026-09-11T02:20:07Z] initdb: creating cluster (user=postgres, locale=C, encoding=UTF8, auth=scram-sha-256)
+[devstack 2026-09-11T02:20:07Z] initdb complete
+[devstack 2026-09-11T02:20:07Z] starting postgres on 127.0.0.1:55432
+waiting for server to start.... done
+server started
+[devstack 2026-09-11T02:20:07Z] building pgx utility (pgtool) with module deps (GOFLAGS=-mod=readonly)
+[devstack 2026-09-11T02:20:08Z] postgres ready (pid 25513, port 55432)
+database "orvexa" created
+[devstack 2026-09-11T02:20:08Z] applying migrations from /home/z/my-project/agents/E1/orvexa/migrations (lexical order, ON_ERROR_STOP)
+[devstack 2026-09-11T02:20:08Z] no psql in bundle — using pgx runner (one tx per file, schema_migrations tracked)
+  ok 0001_control_plane.sql
+  ok 0002_customers.sql
+  ok 0003_conversations_interactions.sql
+  ok 0004_agents_queues.sql
+  ok 0005_cases.sql
+  ok 0006_events_infra.sql
+  ok 0007_events_ingest.sql
+  ok 0008_routing_presence.sql
+  ok 0009_ai.sql
+  ok 0010_workflows_analytics.sql
+  = 0011_clickhouse_facts.sql (engine-specific, skipped by the PG runner)
+  ok 0012_rbac.sql
+[devstack 2026-09-11T02:20:08Z] migrations up to date
+[devstack 2026-09-11T02:20:08Z] start complete — url: postgres://postgres:***@127.0.0.1:55432/orvexa?sslmode=disable
+---
+exit_code=0
+duration_sec=3
+finished_utc=2026-09-11T02:20:08Z
+host_psql_check=see-devstack-gate

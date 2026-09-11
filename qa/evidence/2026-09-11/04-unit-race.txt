@@ -1,0 +1,55 @@
+$ go test -race -count=1 ./...
+---
+?   	github.com/Roy-Wanyoike/orvexa/cmd/api	[no test files]
+ok  	github.com/Roy-Wanyoike/orvexa/cmd/loadgen	2.304s
+?   	github.com/Roy-Wanyoike/orvexa/cmd/realtime	[no test files]
+?   	github.com/Roy-Wanyoike/orvexa/cmd/worker	[no test files]
+?   	github.com/Roy-Wanyoike/orvexa/internal/agents	[no test files]
+ok  	github.com/Roy-Wanyoike/orvexa/internal/ai	1.062s
+?   	github.com/Roy-Wanyoike/orvexa/internal/analytics	[no test files]
+ok  	github.com/Roy-Wanyoike/orvexa/internal/analytics/clickhouse	1.206s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/cases	1.012s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/comms	1.019s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/comms/conformance	3.895s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/comms/factory	1.027s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/comms/registry	1.019s
+?   	github.com/Roy-Wanyoike/orvexa/internal/conversations	[no test files]
+ok  	github.com/Roy-Wanyoike/orvexa/internal/customers	1.012s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/httpserver	1.038s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/identity	2.952s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/interactions	1.018s
+?   	github.com/Roy-Wanyoike/orvexa/internal/messaging	[no test files]
+ok  	github.com/Roy-Wanyoike/orvexa/internal/messaging/adapters/africastalking	1.102s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/messaging/adapters/twilio	5.090s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/messaging/adapters/whatsappcloud	5.172s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/platform/buildinfo	1.011s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/platform/bus	1.359s
+?   	github.com/Roy-Wanyoike/orvexa/internal/platform/db	[no test files]
+?   	github.com/Roy-Wanyoike/orvexa/internal/platform/db/dbinternal	[no test files]
+ok  	github.com/Roy-Wanyoike/orvexa/internal/platform/httpx	3.178s
+?   	github.com/Roy-Wanyoike/orvexa/internal/platform/outbox	[no test files]
+?   	github.com/Roy-Wanyoike/orvexa/internal/queues	[no test files]
+ok  	github.com/Roy-Wanyoike/orvexa/internal/realtime	1.012s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/routing	2.769s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/search	1.086s
+?   	github.com/Roy-Wanyoike/orvexa/internal/telephony	[no test files]
+ok  	github.com/Roy-Wanyoike/orvexa/internal/telephony/adapters/africastalking	13.337s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/telephony/adapters/asterisk	57.072s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/telephony/adapters/freeswitch	22.621s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/telephony/adapters/twilio	6.570s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/tenancy	1.010s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/tools	1.012s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/webhooks	1.029s
+ok  	github.com/Roy-Wanyoike/orvexa/internal/workflows	1.017s
+ok  	github.com/Roy-Wanyoike/orvexa/pkg/config	1.010s
+ok  	github.com/Roy-Wanyoike/orvexa/pkg/errors	1.010s
+ok  	github.com/Roy-Wanyoike/orvexa/pkg/events	1.009s
+ok  	github.com/Roy-Wanyoike/orvexa/pkg/idempotency	1.011s
+?   	github.com/Roy-Wanyoike/orvexa/pkg/logging	[no test files]
+ok  	github.com/Roy-Wanyoike/orvexa/pkg/pagination	1.010s
+ok  	github.com/Roy-Wanyoike/orvexa/tests/contract	1.335s
+---
+exit_code=0
+duration_sec=98
+finished_utc=2026-09-11T02:19:39Z
+host_psql_check=see-devstack-gate

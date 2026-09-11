@@ -32,13 +32,12 @@
 #   (ringing/connected receipts) → hangup → complete → case lifecycle + link
 #   → callback workflow → wrap-up → conversation close → analytics facts.
 #
-# Contract notes (drift routed around here, filed upstream — do not "fix" the
-# workarounds until #101 lands):
-#   - interactions.Rec / CreateInput carry no JSON tags (#101): responses are
-#     Go-cased (data.ID, data.Status) and POST /api/v1/interactions only binds
-#     Go-name keys ("customerid"), because the handler decodes with
-#     DisallowUnknownFields — the spec's snake_case body is rejected 422.
-#   - The comms processor vocabulary (#89 root cause) has no "inbound.whatsapp"
+# Contract notes (#89 root cause and wire contract):
+#   - The snake_case wire contract landed (#101/#110): interactions.Rec /
+#     CreateInput carry documented snake_case JSON tags — the loop posts the
+#     documented snake_case body ("customer_id") and reads snake_case
+#     responses (data.id, data.status), so OpenAPI ⇄ wire ⇄ demo agree.
+#   - The comms processor vocabulary has no "inbound.whatsapp"
 #     topic and requires interaction_id + tenant_id: the loop creates the
 #     inbound interaction first, then delivers the SIGNED message.delivered
 #     event for it — exactly what a real whatsapp_cloud adapter translates.
@@ -200,14 +199,14 @@ demo_loop() {
         ok "3/12 resolve OK (254712345678 → +254712345678 → same customer)"
 
         say "4/12 inbound WhatsApp interaction (conversation auto-opened)"
-        # "customerid" binds case-insensitively to CustomerID; the documented
-        # snake_case body is rejected 422 until #101 lands (#89 workaround).
-        INB="$(curl -sf "${H[@]}" -d "{\"customerid\":\"$CUST\",\"channel\":\"whatsapp\",\"direction\":\"inbound\",\"source\":\"+254712345678\",\"destination\":\"+254700000000\"}" \
-                "$ORVEXA_URL/api/v1/interactions" | jq -er '.data.ID | select(length>0)')" \
+        # Documented snake_case body + snake_case response (#101/#110): wire,
+        # spec and demo agree — no workaround keys.
+        INB="$(curl -sf "${H[@]}" -d "{\"customer_id\":\"$CUST\",\"channel\":\"whatsapp\",\"direction\":\"inbound\",\"source\":\"+254712345678\",\"destination\":\"+254700000000\"}" \
+                "$ORVEXA_URL/api/v1/interactions" | jq -er '.data.id | select(length>0)')" \
                 || die "4/12 interaction create failed"
-        CONV="$(curl -sf "${H[@]}" "$ORVEXA_URL/api/v1/interactions/$INB" | jq -er '.data.ConversationID | select(length>0)')" \
-                || die "4/12 interaction missing ConversationID"
-        poll 15 "/api/v1/interactions/$INB" '.data.Status=="pending"' \
+        CONV="$(curl -sf "${H[@]}" "$ORVEXA_URL/api/v1/interactions/$INB" | jq -er '.data.conversation_id | select(length>0)')" \
+                || die "4/12 interaction missing conversation_id"
+        poll 15 "/api/v1/interactions/$INB" '.data.status=="pending"' \
                 || die "4/12 inbound interaction not pending"
         ok "4/12 inbound whatsapp interaction $INB (conversation $CONV, pending)"
 
@@ -216,7 +215,7 @@ demo_loop() {
         # the interaction record — exactly what a real adapter translates.
         EVENT_BODY="$(curl -sf "${H[@]}" "$ORVEXA_URL/api/v1/interactions/$INB" | jq -c \
                 --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-                '{event:"message.delivered",interaction_id:.data.ID,tenant_id:.data.TenantID,timestamp:$now,detail:"demo inbound delivery"}')"
+                '{event:"message.delivered",interaction_id:.data.id,tenant_id:.data.tenant_id,timestamp:$now,detail:"demo inbound delivery"}')"
         SIG="$(SIG_OF "$EVENT_BODY")"
         local first
         first="$(curl -sf -X POST -H "Content-Type: application/json" -H "X-Orvexa-Signature: $SIG" \
@@ -243,7 +242,7 @@ demo_loop() {
                 || die "5c tampered signature must fail closed with HTTP 401"
         ok "5c FAILURE INJECTION tamper: 401 webhook.invalid_signature (fail-closed ingress)"
 
-        poll 15 "/api/v1/interactions/$INB" '.data.Status=="active"' \
+        poll 15 "/api/v1/interactions/$INB" '.data.status=="active"' \
                 || die "5d provider event must drive pending→active"
         ok "5d interaction active after the signed provider event"
 
@@ -262,14 +261,14 @@ demo_loop() {
         curl -sf "${H[@]}" "$ORVEXA_URL/api/v1/routing/decisions?interaction_id=$INB" \
                 | jq -e '.data|length>=1' >/dev/null || die "7b decision record not queryable"
         curl -sf "${H[@]}" "$ORVEXA_URL/api/v1/interactions/$INB" \
-                | jq -e --arg a "$AGENT" '.data.AssignedAgentID==$a' >/dev/null \
-                || die "7c interaction must carry AssignedAgentID after routing"
+                | jq -e --arg a "$AGENT" '.data.assigned_agent_id==$a' >/dev/null \
+                || die "7c interaction must carry assigned_agent_id after routing"
         ok "7/12 assigned_agent decision recorded + applied to the interaction"
 
         say "8/12 outbound call via the simulator carrier (one leg per tenant — #90)"
         CALL="$(curl -sf "${H[@]}" -d "{\"customer_id\":\"$CUST\",\"to\":\"+254712345678\"}" \
-                "$ORVEXA_URL/api/v1/calls" | jq -er '.data.ID | select(length>0)')" \
-                || die "8a call place failed (data.ID — Go-cased response, #101)"
+                "$ORVEXA_URL/api/v1/calls" | jq -er '.data.id | select(length>0)')" \
+                || die "8a call place failed (data.id — snake_case wire contract #110)"
         # The simulator's own ringing/connected receipts are ledger-only today
         # (#103): internal deliveries persist to provider_events with no consumer,
         # so pending→active needs the carrier-callback path — the public,
@@ -279,21 +278,21 @@ demo_loop() {
                 local cb cb_sig
                 cb="$(curl -sf "${H[@]}" "$ORVEXA_URL/api/v1/interactions/$CALL" | jq -c \
                         --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg e "$ev" \
-                        '{event:$e,interaction_id:.data.ID,tenant_id:.data.TenantID,timestamp:$now,detail:"demo carrier callback"}')"
+                        '{event:$e,interaction_id:.data.id,tenant_id:.data.tenant_id,timestamp:$now,detail:"demo carrier callback"}')"
                 cb_sig="$(SIG_OF "$cb")"
                 curl -sf -X POST -H "Content-Type: application/json" -H "X-Orvexa-Signature: $cb_sig" \
                         -d "$cb" "$ORVEXA_URL/api/v1/webhooks/simulator" | jq -e '.data.processed==true' >/dev/null \
                         || die "8b carrier callback $ev rejected"
         done
-        poll 15 "/api/v1/interactions/$CALL" '.data.Status=="active"' \
+        poll 15 "/api/v1/interactions/$CALL" '.data.status=="active"' \
                 || die "8c call must be active after the ringing/connected callbacks"
         ok "8a outbound call $CALL placed; carrier callbacks (call.ringing → call.connected) active"
 
         sleep 0.3 # carrier-side pacing, as between real callbacks
         curl -sf "${H[@]}" -d '{"action":"hangup"}' "$ORVEXA_URL/api/v1/calls/$CALL/actions" \
-                | jq -e '.data.Status|length>0' >/dev/null || die "8d hangup failed"
+                | jq -e '.data.status|length>0' >/dev/null || die "8d hangup failed"
         curl -sf "${H[@]}" -d '{"action":"complete"}' "$ORVEXA_URL/api/v1/calls/$CALL/actions" \
-                | jq -e '.data.Status=="completed"' >/dev/null || die "8e complete must end at completed"
+                | jq -e '.data.status=="completed"' >/dev/null || die "8e complete must end at completed"
         ok "8b hangup → complete: interaction completed"
 
         say "9/12 case lifecycle + link"
@@ -315,9 +314,9 @@ demo_loop() {
 
         say "11/12 wrap-up + conversation close"
         curl -sf "${H[@]}" -d '{"to":"wrapup"}' "$ORVEXA_URL/api/v1/interactions/$INB/transition" \
-                | jq -e '.data.Status=="wrapup"' >/dev/null || die "11a wrapup transition failed"
+                | jq -e '.data.status=="wrapup"' >/dev/null || die "11a wrapup transition failed"
         curl -sf "${H[@]}" -d '{"to":"completed","end_reason":"resolved"}' "$ORVEXA_URL/api/v1/interactions/$INB/transition" \
-                | jq -e '.data.Status=="completed"' >/dev/null || die "11b completed transition failed"
+                | jq -e '.data.status=="completed"' >/dev/null || die "11b completed transition failed"
         curl -sf "${H[@]}" -d '{"reason":"resolved"}' "$ORVEXA_URL/api/v1/conversations/$CONV/close" \
                 | jq -e '.data.status=="closed"' >/dev/null || die "11c conversation close failed"
         ok "11/12 inbound interaction wrap-up → completed; conversation closed (continuous context resolved)"

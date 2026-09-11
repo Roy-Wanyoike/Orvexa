@@ -1,0 +1,130 @@
+$ bash scripts/e2e-demo.sh
+---
+orvexa e2e demo — MANAGED mode (booting devstack + api + worker + fresh tenant)
+[devstack 2026-09-11T02:35:42Z] bundle jar cached: /home/z/my-project/agents/E1/orvexa/.devstack/cache/zonky/embedded-postgres-binaries-linux-amd64-16.4.0.jar
+[devstack 2026-09-11T02:35:42Z] bundle already extracted: /home/z/my-project/agents/E1/orvexa/.devstack/bundle/16.4.0
+[devstack 2026-09-11T02:35:42Z] data dir already initialized: /home/z/my-project/agents/E1/orvexa/.devstack/pg/data
+[devstack 2026-09-11T02:35:42Z] starting postgres on 127.0.0.1:55445
+[devstack 2026-09-11T02:35:42Z] postgres ready (pid 28735, port 55445)
+[devstack 2026-09-11T02:35:42Z] applying migrations from /home/z/my-project/agents/E1/orvexa/migrations (lexical order, ON_ERROR_STOP)
+[devstack 2026-09-11T02:35:42Z] no psql in bundle — using pgx runner (one tx per file, schema_migrations tracked)
+[devstack 2026-09-11T02:35:42Z] migrations up to date
+[devstack 2026-09-11T02:35:42Z] start complete — url: postgres://postgres:***@127.0.0.1:55445/orvexa?sslmode=disable
+building api + worker from the current tree…
+stack ready: http://127.0.0.1:55446 (devstack :55445, pid api=28877 worker=28878)
+demo tenant seeded (key orvx_e2e_99d…)
+
+── 1/12 health ─────────────────────────────────────────
+  ✓ PASS  1/12 stack ready
+
+── 2/12 customer with two channel identities ─────────────────────────────────────────
+  ✓ PASS  2/12 customer 1b4d5687-b053-4411-a2de-8e1b4037f403 (phone + whatsapp identities)
+
+── 3/12 identifier resolution — same customer via phone ─────────────────────────────────────────
+  ✓ PASS  3/12 resolve OK (254712345678 → +254712345678 → same customer)
+
+── 4/12 inbound WhatsApp interaction (conversation auto-opened) ─────────────────────────────────────────
+  ✓ PASS  4/12 inbound whatsapp interaction a6de1634-c6f1-47da-86dd-ffdd14709fc8 (conversation 23e0b805-3e49-4b49-a28f-f23cd468416d, pending)
+
+── 5/12 signed provider webhook → replay deduped → tamper fail-closed ─────────────────────────────────────────
+  ✓ PASS  5a signed webhook accepted (202, processed): event_id=auto_a38a404d5f2c041af1c6b233f426ac4f
+  ✓ PASS  5b FAILURE INJECTION replay: duplicate=true, same event_id (single effect)
+  ✓ PASS  5c FAILURE INJECTION tamper: 401 webhook.invalid_signature (fail-closed ingress)
+  ✓ PASS  5d interaction active after the signed provider event
+
+── 6/12 agent presence ─────────────────────────────────────────
+  ✓ PASS  6/12 agent fa5d67d2-22ef-42de-a7f5-b6667077df3c available (skills: billing, language: sw)
+
+── 7/12 routing decision → assignment ─────────────────────────────────────────
+  ✓ PASS  7/12 assigned_agent decision recorded + applied to the interaction
+
+── 8/12 outbound call via the simulator carrier (one leg per tenant — #90) ─────────────────────────────────────────
+  ✓ PASS  8a outbound call afac8ba4-cf64-4ca1-b164-9dfdb006da26 placed; carrier callbacks (call.ringing → call.connected) active
+  ✓ PASS  8b hangup → complete: interaction completed
+
+── 9/12 case lifecycle + link ─────────────────────────────────────────
+  ✓ PASS  9/12 case linked + open → in_progress → resolved → closed
+
+── 10/12 callback workflow ─────────────────────────────────────────
+  ✓ PASS  10/12 callback workflow 72151e89-dfb9-41c9-922a-13c0d12f9a0e started
+
+── 11/12 wrap-up + conversation close ─────────────────────────────────────────
+  ✓ PASS  11/12 inbound interaction wrap-up → completed; conversation closed (continuous context resolved)
+
+── 12/12 analytics facts ─────────────────────────────────────────
+  ✓ PASS  12/12 analytics summary: {"total_interactions":4,"interactions_by_channel":{"":2,"voice":1,"whatsapp":1}}
+
+── DONE — demo loop green (12/12) ─────────────────────────────────────────
+
+══ customer-journey suite (go test -race -tags=e2e ./tests/e2e/) ══
+=== RUN   TestJourney1_InboundWhatsApp_Routing_Assignment_Wrapup_CaseClose
+    j1_inbound_whatsapp_test.go:34: J1 tenant c284e3d6-3f37-441f-84cf-e1f581d03512 (key orvx_e2e_502…)
+    j1_inbound_whatsapp_test.go:44: ✓ stack ready (db up)
+    j1_inbound_whatsapp_test.go:60: ✓ customer 93d355b6-517d-44b5-bdd6-d16210f25b27 created
+    j1_inbound_whatsapp_test.go:72: ✓ identifier resolution: 254712345678 → +254712345678 → same customer
+    j1_inbound_whatsapp_test.go:97: ✓ inbound whatsapp interaction 581952a4-bd66-4ef5-a405-d700cadca26f (conversation e64703c9-8d9a-4553-ab59-d5cddfcc8d29, status pending)
+    j1_inbound_whatsapp_test.go:119: ✓ signed webhook accepted (202): event_id=auto_b9c73d8a29344ed5556e52b3b5d3e806 processed=true
+    j1_inbound_whatsapp_test.go:131: ✓ FAILURE INJECTION (replay): duplicate=true, event_id=auto_b9c73d8a29344ed5556e52b3b5d3e806 (single effect)
+    j1_inbound_whatsapp_test.go:138: ✓ FAILURE INJECTION (tamper): 401 webhook.invalid_signature — ingress is fail-closed
+    j1_inbound_whatsapp_test.go:148: ✓ interaction active after signed provider event
+    j1_inbound_whatsapp_test.go:167: ✓ agent e670c52b-92db-46c5-afef-785baba30562 available (skills: billing, language: sw)
+    j1_inbound_whatsapp_test.go:189: ✓ routing decision cd5c5888-596d-4e14-b0e3-71a3c648df12: outcome=assigned_agent → agent e670c52b-92db-46c5-afef-785baba30562
+    j1_inbound_whatsapp_test.go:202: ✓ decision record queryable via /routing/decisions
+    j1_inbound_whatsapp_test.go:216: ✓ interaction carries AssignedAgentID after routing
+    j1_inbound_whatsapp_test.go:226: ✓ interaction wrapped up (active → wrapup)
+    j1_inbound_whatsapp_test.go:243: ✓ case CASE-2026-0001 (ae743783-e7c5-40aa-bd21-d795ec7cdeb3) opened and interaction linked
+    j1_inbound_whatsapp_test.go:259: ✓ case closed (open → in_progress → resolved → closed)
+    j1_inbound_whatsapp_test.go:281: ✓ interaction completed + conversation closed — J1 GREEN
+--- PASS: TestJourney1_InboundWhatsApp_Routing_Assignment_Wrapup_CaseClose (0.04s)
+=== RUN   TestJourney2_OutboundSMS_Receipts_Analytics
+    j2_outbound_sms_test.go:42: J2 tenant 99f87bc7-f809-4281-a32c-634d18912298 (key orvx_e2e_2fc…)
+    j2_outbound_sms_test.go:52: ✓ customer 1a4b0ae0-833d-4307-9417-117553ffde86
+    j2_outbound_sms_test.go:76: ✓ outbound sms interaction 88ad311a-443d-4415-95f3-12f0d9e59496 created (status=active at response time)
+    j2_outbound_sms_test.go:89: ✓ interaction active (queued→sent); simulator sent/delivered receipts signed into the ledger (#103: ledger-only)
+    j2_outbound_sms_test.go:103: ✓ FAILURE INJECTION (tamper): read receipt with forged signature → 401, never persisted
+    j2_outbound_sms_test.go:115: ✓ signed read receipt accepted (202): event_id=auto_57b22ac2e3f2b5bff01dbbd43b2b2777
+    j2_outbound_sms_test.go:127: ✓ FAILURE INJECTION (replay): duplicate=true, event_id=auto_57b22ac2e3f2b5bff01dbbd43b2b2777 — single effect
+    j2_outbound_sms_test.go:139: ✓ interaction completed by the carrier read receipt
+    j2_outbound_sms_test.go:167: ✓ analytics summary: total_interactions=2 by_channel=map[:1 sms:1] (window 2026-09-10T02:35:48.84536507Z → 2026-09-11T02:35:48.84536507Z)
+    j2_outbound_sms_test.go:169: J2 GREEN
+--- PASS: TestJourney2_OutboundSMS_Receipts_Analytics (0.21s)
+=== RUN   TestJourney3_AI_Suggest_ToolCall_AuditTrail
+    j3_ai_tool_audit_test.go:32: J3 tenant f7c75846-ec15-4894-ac17-73bb357f7034 agent 58906369-ec80-49a9-a30a-8327ff0c7f1e (key orvx_e2e_b27…)
+    j3_ai_tool_audit_test.go:54: ✓ AI agent 58906369-ec80-49a9-a30a-8327ff0c7f1e active (model_hint=rules-v1, tools=map[create_case:2 get_customer:5])
+    j3_ai_tool_audit_test.go:94: ✓ AI suggest (metered): outcome=completed kind=next_best_action tokens=11+16 — "Reply to the customer's latest message"
+    j3_ai_tool_audit_test.go:116: ✓ tool call executed=true through the gateway (tenant-scoped, allowlisted)
+    j3_ai_tool_audit_test.go:136: ✓ FAILURE INJECTION (policy refusal): send_whatsapp → 403 executed=false (tool not in agent allowlist)
+    j3_ai_tool_audit_test.go:160: ✓ audit trail: 1 executed + 1 refused tool decision(s) recorded
+    j3_ai_tool_audit_test.go:168: ✓ metering: usage.recorded fact (ai_tokens) recorded for the invocation
+    j3_ai_tool_audit_test.go:169: J3 GREEN
+--- PASS: TestJourney3_AI_Suggest_ToolCall_AuditTrail (0.21s)
+PASS
+ok  	github.com/Roy-Wanyoike/orvexa/tests/e2e	3.909s
+
+  ✓ PASS  journeys J1+J2+J3 GREEN (transcript: /home/z/my-project/agents/E1/orvexa/qa/evidence/2026-09-11/journeys/go-journeys-023541.txt)
+
+════════ E2E SUMMARY (2026-09-11T02:35:50Z) ════════
+  ✓ 1/12 stack ready
+  ✓ 2/12 customer 1b4d5687-b053-4411-a2de-8e1b4037f403 (phone + whatsapp identities)
+  ✓ 3/12 resolve OK (254712345678 → +254712345678 → same customer)
+  ✓ 4/12 inbound whatsapp interaction a6de1634-c6f1-47da-86dd-ffdd14709fc8 (conversation 23e0b805-3e49-4b49-a28f-f23cd468416d, pending)
+  ✓ 5a signed webhook accepted (202, processed): event_id=auto_a38a404d5f2c041af1c6b233f426ac4f
+  ✓ 5b FAILURE INJECTION replay: duplicate=true, same event_id (single effect)
+  ✓ 5c FAILURE INJECTION tamper: 401 webhook.invalid_signature (fail-closed ingress)
+  ✓ 5d interaction active after the signed provider event
+  ✓ 6/12 agent fa5d67d2-22ef-42de-a7f5-b6667077df3c available (skills: billing, language: sw)
+  ✓ 7/12 assigned_agent decision recorded + applied to the interaction
+  ✓ 8a outbound call afac8ba4-cf64-4ca1-b164-9dfdb006da26 placed; carrier callbacks (call.ringing → call.connected) active
+  ✓ 8b hangup → complete: interaction completed
+  ✓ 9/12 case linked + open → in_progress → resolved → closed
+  ✓ 10/12 callback workflow 72151e89-dfb9-41c9-922a-13c0d12f9a0e started
+  ✓ 11/12 inbound interaction wrap-up → completed; conversation closed (continuous context resolved)
+  ✓ 12/12 analytics summary: {"total_interactions":4,"interactions_by_channel":{"":2,"voice":1,"whatsapp":1}}
+  ✓ journeys J1+J2+J3 GREEN (transcript: /home/z/my-project/agents/E1/orvexa/qa/evidence/2026-09-11/journeys/go-journeys-023541.txt)
+════════ transcript: /home/z/my-project/agents/E1/orvexa/qa/evidence/2026-09-11/journeys/demo-loop-023541.txt
+════════ RESULT: ALL GREEN ════════
+---
+exit_code=0
+duration_sec=39
+finished_utc=2026-09-11T02:36:20Z
+host_psql_check=see-devstack-gate

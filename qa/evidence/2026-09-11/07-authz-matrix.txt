@@ -1,0 +1,15 @@
+$ bash -c echo "== preamble: stopping main devstack (55432) — authz harness owns its own cycle on 55439 (per harness_test.go defaultDevstackPort + task note)"; scripts/devstack.sh stop; echo; echo "== gate: go test -race -count=1 -tags=authz ./tests/authz/"; go test -race -count=1 -tags=authz ./tests/authz/
+---
+== preamble: stopping main devstack (55432) — authz harness owns its own cycle on 55439 (per harness_test.go defaultDevstackPort + task note)
+[devstack 2026-09-11T02:23:19Z] stopping (mode=smart)
+waiting for server to shut down.... done
+server stopped
+[devstack 2026-09-11T02:23:20Z] stopped cleanly (pid 25513 gone, pid file removed)
+
+== gate: go test -race -count=1 -tags=authz ./tests/authz/
+ok  	github.com/Roy-Wanyoike/orvexa/tests/authz	2.639s
+---
+exit_code=0
+duration_sec=4
+finished_utc=2026-09-11T02:23:23Z
+host_psql_check=see-devstack-gate

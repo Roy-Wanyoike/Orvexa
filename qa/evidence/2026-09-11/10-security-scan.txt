@@ -1,0 +1,89 @@
+$ bash scripts/security-scan.sh
+---
+==============================================================================
+ORVEXA SECURITY SCAN — tracked-file secret sweep (issue #39)
+==============================================================================
+CHECK                             HITS  ALLOWLISTED  ACTIONABLE
+------------------------------------------------------------------------------
+C1 AWS access key                    0            0           0
+C2 AWS secret assign                 0            0           0
+C3 Slack token                       0            0           0
+C4 OpenAI key                        0            0           0
+C5 Google API key                    0            0           0
+C6 GitHub token                      0            0           0
+C7 Private-key block                 0            0           0
+C8 Credential URL                   29           29           0
+C12 Generic credential assign        9            9           0
+C9 High-entropy string              18           18           0
+C10 Tracked .env file                0            0           0
+C11 Secret-named artifact            0            0           0
+------------------------------------------------------------------------------
+Files scanned: 324 of 324 tracked (binary excluded)
+Entropy calibration: >=40 chars, Shannon entropy >= 4.5 bits/char;
+  structural filters: URLs (C8-covered), ORVEXA_* env refs, imports/doc refs,
+  Go test identifiers, golden-fixture dummy hex, go.sum/go.mod checksums.
+
+Allowlisted hits (each justified, manually reviewed):
+  [C12 Generic credential assign] docs/audit/repository-audit.md:89 — template/placeholder literal (api_key = …)
+  [C12 Generic credential assign] docs/perf/run-baseline.sh:30 — template/placeholder literal (SECRET="$(…)
+  [C12 Generic credential assign] docs/security/security-posture.md:35 — self-described non-credential test value (APIKey = "…)
+  [C12 Generic credential assign] docs/security/security-posture.md:35 — self-described non-credential test value (password =…)
+  [C12 Generic credential assign] internal/telephony/adapters/africastalking/voice_test.go:303 — self-described non-credential test value (APIKey = "…)
+  [C12 Generic credential assign] internal/telephony/adapters/freeswitch/conn_test.go:67 — self-described non-credential test value (password =…)
+  [C12 Generic credential assign] internal/telephony/adapters/freeswitch/voice_test.go:164 — self-described non-credential test value (Password: …)
+  [C12 Generic credential assign] scripts/e2e-demo.sh:118 — template/placeholder literal (SECRET="${…)
+  [C12 Generic credential assign] scripts/e2e-demo.sh:387 — template/placeholder literal (SECRET="$O…)
+  [C8 Credential URL] .env.example:11 — loopback/dev host (local dummy credential) (postgres:/…)
+  [C8 Credential URL] .env.example:71 — loopback/dev host (local dummy credential) (postgres:/…)
+  [C8 Credential URL] README.md:98 — loopback/dev host (local dummy credential) (postgres:/…)
+  [C8 Credential URL] docker-compose.dev.yml:7 — loopback/dev host (local dummy credential) (postgres:/…)
+  [C8 Credential URL] docker-compose.dev.yml:18 — loopback/dev host (local dummy credential) (postgres:/…)
+  [C8 Credential URL] docs/audit/repository-audit.md:89 — placeholder userinfo (format documentation) (scheme://u…)
+  [C8 Credential URL] docs/audit/repository-audit.md:96 — loopback/dev host (local dummy credential) (postgres:/…)
+  [C8 Credential URL] docs/devstack.md:52 — loopback/dev host (local dummy credential) (postgres:/…)
+  [C8 Credential URL] docs/devstack.md:117 — loopback/dev host (local dummy credential) (postgres:/…)
+  [C8 Credential URL] docs/perf/run-baseline.sh:29 — loopback/dev host (local dummy credential) (postgres:/…)
+  [C8 Credential URL] docs/runbooks/operations.md:53 — placeholder userinfo (format documentation) (clickhouse…)
+  [C8 Credential URL] docs/security/security-posture.md:23 — placeholder userinfo (format documentation) (scheme://u…)
+  [C8 Credential URL] docs/security/security-posture.md:33 — loopback/dev host (local dummy credential) (postgres:/…)
+  [C8 Credential URL] docs/security/security-posture.md:33 — loopback/dev host (local dummy credential) (postgres:/…)
+  [C8 Credential URL] docs/security/security-posture.md:33 — loopback/dev host (local dummy credential) (clickhouse…)
+  [C8 Credential URL] docs/security/security-posture.md:34 — placeholder userinfo (format documentation) (redis://[u…)
+  [C8 Credential URL] docs/security/security-posture.md:34 — placeholder userinfo (format documentation) (clickhouse…)
+  [C8 Credential URL] docs/security/security-posture.md:34 — placeholder userinfo (format documentation) (https://us…)
+  [C8 Credential URL] internal/analytics/clickhouse/env.go:20 — placeholder userinfo (format documentation) (clickhouse…)
+  [C8 Credential URL] internal/analytics/clickhouse/env.go:21 — placeholder userinfo (format documentation) (http://use…)
+  [C8 Credential URL] internal/analytics/clickhouse/env_test.go:114 — loopback/dev host (local dummy credential) (http://def…)
+  [C8 Credential URL] internal/analytics/clickhouse/store_test.go:174 — loopback/dev host (local dummy credential) (clickhouse…)
+  [C8 Credential URL] internal/messaging/adapters/whatsappcloud/provider_test.go:230 — placeholder userinfo (format documentation) (https://us…)
+  [C8 Credential URL] internal/platform/httpx/limiter_redis.go:227 — placeholder userinfo (format documentation) (redis://[u…)
+  [C8 Credential URL] internal/routing/presence_redis.go:119 — placeholder userinfo (format documentation) (redis://[u…)
+  [C8 Credential URL] internal/workflows/temporaldriver/config_test.go:45 — placeholder userinfo (format documentation) (postgresql…)
+  [C8 Credential URL] internal/workflows/temporaldriver/config_test.go:45 — placeholder userinfo (format documentation) (postgresql…)
+  [C8 Credential URL] scripts/devstack.sh:370 — placeholder userinfo (format documentation) (postgres:/…)
+  [C8 Credential URL] scripts/devstack.sh:375 — placeholder userinfo (format documentation) (postgres:/…)
+  [C9 High-entropy string] CHANGELOG.md:50 — import path / doc reference (//github.c…)
+  [C9 High-entropy string] README.md:10 — import path / doc reference (//img.shie…)
+  [C9 High-entropy string] README.md:11 — import path / doc reference (//img.shie…)
+  [C9 High-entropy string] docs/devstack.md:93 — import path / doc reference (//repo1.ma…)
+  [C9 High-entropy string] internal/comms/factory/factory_test.go:405 — ORVEXA_* env-var reference/assignment (documented knob) (ORVEXA_MES…)
+  [C9 High-entropy string] internal/messaging/adapters/whatsappcloud/fake_test.go:29 — self-described fixture/example string (EAAG-test-…)
+  [C9 High-entropy string] internal/platform/buildinfo/buildinfo.go:4 — import path / doc reference (github.com…)
+  [C9 High-entropy string] internal/platform/buildinfo/buildinfo.go:6 — import path / doc reference (github.com…)
+  [C9 High-entropy string] internal/routing/presence_redis_test.go:333 — Go test identifier (TestNewPre…)
+  [C9 High-entropy string] internal/webhooks/testdata/generate_golden.py:93 — sequential dummy hex (golden fixture) (accountSid…)
+  [C9 High-entropy string] internal/webhooks/testdata/twilio_golden.json:24 — sequential dummy hex (golden fixture) (accountSid…)
+  [C9 High-entropy string] qa/evidence/2026-09-11/journeys/demo-loop-011544.txt:50 — import path / doc reference (/home/z/my…)
+  [C9 High-entropy string] qa/evidence/2026-09-11/journeys/demo-loop-011544.txt:69 — import path / doc reference (/home/z/my…)
+  [C9 High-entropy string] qa/evidence/2026-09-11/journeys/demo-loop-011544.txt:70 — import path / doc reference (/home/z/my…)
+  [C9 High-entropy string] scripts/e2e-demo.sh:222 — ORVEXA_* env-var reference/assignment (documented knob) (ORVEXA_URL…)
+  [C9 High-entropy string] scripts/e2e-demo.sh:230 — ORVEXA_* env-var reference/assignment (documented knob) (ORVEXA_URL…)
+  [C9 High-entropy string] scripts/e2e-demo.sh:237 — ORVEXA_* env-var reference/assignment (documented knob) (ORVEXA_URL…)
+  [C9 High-entropy string] scripts/e2e-demo.sh:241 — ORVEXA_* env-var reference/assignment (documented knob) (ORVEXA_URL…)
+
+RESULT: CLEAN — zero actionable secret findings in tracked files.
+---
+exit_code=0
+duration_sec=0
+finished_utc=2026-09-11T02:37:40Z
+host_psql_check=see-devstack-gate

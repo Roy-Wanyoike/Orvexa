@@ -1,0 +1,11 @@
+$ bash -c echo "## part A: go vet ./..."; go vet ./...; rca=$?; echo "vet_default_exit=$rca"; echo "## part B: go vet -tags=\"integration authz e2e temporal\" ./..."; go vet -tags="integration authz e2e temporal" ./...; rcb=$?; echo "vet_tags_exit=$rcb"; [ $rca -eq 0 ] && [ $rcb -eq 0 ]; exit $?
+---
+## part A: go vet ./...
+vet_default_exit=0
+## part B: go vet -tags="integration authz e2e temporal" ./...
+vet_tags_exit=0
+---
+exit_code=0
+duration_sec=50
+finished_utc=2026-09-11T02:17:55Z
+host_psql_check=see-devstack-gate

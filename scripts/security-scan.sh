@@ -90,7 +90,8 @@ PLACEHOLDER_USERINFO = re.compile(
     re.IGNORECASE)
 # C8: hosts that cannot hold production credentials (local/dev/doc dummies)
 LOOPBACK_HOST = re.compile(
-    r"^(?:localhost|127\.0\.0\.1|\[::1\]|::1|host\.docker\.internal|.*\.example\.?[a-z.]*|.*\.test|.*\.local)(?::\d+)?$",
+    r"^(?:localhost|127\.0\.0\.1|\[::1\]|::1|host\.docker\.internal|.*\.example\.?[a-z.]*|.*\.test|.*\.local)"
+    r"(?::\d+|:\$\{[A-Za-z_][A-Za-z0-9_]*\})?$",   # numeric port or ${SHELL_VAR} port (e.g. docs/perf/run-baseline.sh)
     re.IGNORECASE)
 DUMMY_HEX = re.compile(r"(?:0123456789abcdef){2,}")   # sequential dummy hex (golden fixtures)
 GO_IDENT = re.compile(r"^[A-Za-z]+$")

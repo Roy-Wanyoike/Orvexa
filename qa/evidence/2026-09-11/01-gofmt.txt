@@ -1,0 +1,7 @@
+$ gofmt -l .
+---
+---
+exit_code=0
+duration_sec=0
+finished_utc=2026-09-11T02:16:56Z
+host_psql_check=see-devstack-gate
