@@ -58,6 +58,11 @@ Status distribution at every step: `200` (list) / `201` (creates) / `202` (webho
   aggregate on loopback the system shows no failure mode (0 errors, 0 429s,
   0 5xx). Filing speculative bottlenecks would be fabrication. The honest
   follow-up is a saturation run (see caveats below).
+- **#104 fix evidence under load:** the measured mix includes 5,248 API
+  interaction creates (64 seeded + 5,184 measured, all `201`, zero `409`s) in
+  one tenant — before d621c17 the *second* such create per tenant always 409'd
+  on the `(tenant_id, provider, provider_ref)` unique index (empty-string
+  provider_ref). The fix holds across the full envelope.
 
 ## Caveats (read before quoting these numbers)
 
