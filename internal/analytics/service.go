@@ -124,7 +124,7 @@ func (s *Service) Summary(ctx context.Context, tenantID string, from, to time.Ti
 	sum.Window.From, sum.Window.To = from, to
 
 	rows, err := s.pool.Query(ctx, `
-		SELECT channel, status, count(*) FROM interaction_fact
+		SELECT channel, status, count(DISTINCT interaction_id) FROM interaction_fact
 		WHERE tenant_id = $1 AND occurred_at BETWEEN $2 AND $3
 		GROUP BY channel, status`, tenantID, from, to)
 	if err != nil {

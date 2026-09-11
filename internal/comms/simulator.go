@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	apperrors "github.com/Roy-Wanyoike/orvexa/pkg/errors"
+
 	"github.com/Roy-Wanyoike/orvexa/internal/messaging"
 	"github.com/Roy-Wanyoike/orvexa/internal/telephony"
 )
@@ -168,5 +170,8 @@ func (e simError) Error() string { return string(e) }
 
 const (
 	errTenantRequired = simError("simulator: tenant context required")
-	errUnknownLeg     = simError("simulator: unknown provider leg reference")
 )
+
+// unknown-leg is a typed not-found so the telephony service can map actions
+// on unplaced interactions to a 4xx (never a 500) — [O-31]/#99.
+var errUnknownLeg = apperrors.NotFound("simulator.unknown_leg", "simulator: unknown provider leg reference")

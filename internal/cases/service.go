@@ -364,6 +364,17 @@ func (s *Service) List(ctx context.Context, tenantID string, page pagination.Pag
 
 // ListNotes returns the note thread of a case.
 func (s *Service) ListNotes(ctx context.Context, tenantID, id string, page pagination.Page) ([]Note, string, error) {
+	// Tenancy contract consistency ([O-31]/#98): foreign/missing case reads 404,
+	// matching GET of the parent resource (no empty-list oracle difference).
+	var exists bool
+	if err := s.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM cases WHERE id = $1 AND tenant_id = $2)`,
+		id, tenantID).Scan(&exists); err != nil {
+		return nil, "", apperrors.Internal("db.read_failed", "read failed").WithCause(err)
+	}
+	if !exists {
+		return nil, "", apperrors.NotFound("case.not_found", "case not found")
+	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, author_type, author_id, body, internal, created_at
 		FROM case_notes WHERE case_id = $1 AND tenant_id = $2

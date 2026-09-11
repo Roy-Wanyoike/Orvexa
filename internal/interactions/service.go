@@ -312,6 +312,17 @@ func (s *Service) Get(ctx context.Context, tenantID, id string) (*Rec, error) {
 
 // ListByConversation returns the interaction timeline of a conversation.
 func (s *Service) ListByConversation(ctx context.Context, tenantID, conversationID string, page pagination.Page) ([]Rec, string, error) {
+	// Tenancy contract consistency ([O-31]/#98): a foreign or missing parent
+	// must read exactly like a missing resource (404), not an empty list.
+	var exists bool
+	if err := s.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM conversations WHERE id = $1 AND tenant_id = $2)`,
+		conversationID, tenantID).Scan(&exists); err != nil {
+		return nil, "", apperrors.Internal("db.read_failed", "read failed").WithCause(err)
+	}
+	if !exists {
+		return nil, "", apperrors.NotFound("conversation.not_found", "conversation not found")
+	}
 	rows, err := s.pool.Query(ctx, `
                 SELECT id, channel, direction, status, source, destination,
                         coalesce(assigned_agent_id::text,''), coalesce(assigned_queue_id::text,''),
