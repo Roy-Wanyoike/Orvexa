@@ -1,8 +1,10 @@
 // Command worker runs Orvexa's asynchronous subsystems:
 //   - transactional outbox dispatcher (at-least-once delivery to the bus)
 //   - audit consumer (append-only audit_events from domain events)
-//
-// Consumer wiring for analytics/usage lands with their waves.
+//   - analytics facts consumer (Postgres or ClickHouse sink)
+//   - conversation search indexer (OpenSearch, when configured)
+//   - provider-events consumer (applies the webhook ledger to interactions)
+//   - durable workflow executor
 package main
 
 import (
@@ -18,10 +20,13 @@ import (
 
 	"github.com/Roy-Wanyoike/orvexa/internal/analytics"
 	"github.com/Roy-Wanyoike/orvexa/internal/analytics/clickhouse"
+	"github.com/Roy-Wanyoike/orvexa/internal/comms"
+	"github.com/Roy-Wanyoike/orvexa/internal/interactions"
 	"github.com/Roy-Wanyoike/orvexa/internal/platform/bus"
 	"github.com/Roy-Wanyoike/orvexa/internal/platform/db"
 	"github.com/Roy-Wanyoike/orvexa/internal/platform/outbox"
 	"github.com/Roy-Wanyoike/orvexa/internal/search"
+	"github.com/Roy-Wanyoike/orvexa/internal/webhooks"
 	"github.com/Roy-Wanyoike/orvexa/internal/workflows"
 	"github.com/Roy-Wanyoike/orvexa/pkg/config"
 	"github.com/Roy-Wanyoike/orvexa/pkg/events"
@@ -120,8 +125,24 @@ func main() {
 		os.Exit(1)
 	}
 
+	// provider-events consumer (issue #103): drains the webhook ledger
+	// (provider_events) into the interaction domain through the SAME
+	// comms.Processor the HTTP webhook path uses, then marks rows processed
+	// via the gateway's MarkProcessed. The INTERNAL ingest path - the
+	// simulator's signed receipts on the default carrier - only persists;
+	// THIS drain advances outbound calls (pending->active->wrapup) and
+	// message receipts. Before #103 those rows were written and never read.
+	outboxWriter := outbox.NewWriter(pool)
+	interactionCore := interactions.NewService(pool, outboxWriter, "orvexa-worker")
+	ledger := webhooks.NewGateway(pool, cfg.WebhookHMACSecret) // only MarkProcessed is used here
+	receipts := comms.NewEventConsumer(pool, &comms.Processor{Interactions: interactionCore}, ledger, comms.EventConsumerConfig{}, log)
+	go func() {
+		log.Info("provider-events consumer running")
+		receipts.Run(ctx)
+	}()
+
 	// durable workflow executor: advance due workflows every 15s
-	eng := workflows.NewEngine(pool, outbox.NewWriter(pool), &workerServices{pool: pool}, "orvexa-worker")
+	eng := workflows.NewEngine(pool, outboxWriter, &workerServices{pool: pool}, "orvexa-worker")
 	go func() {
 		t := time.NewTicker(15 * time.Second)
 		defer t.Stop()
@@ -156,6 +177,11 @@ func main() {
 				if m.Pending > 0 || m.Failed > 0 {
 					log.Warn("outbox backlog", "pending", m.Pending, "publishing", m.Publishing, "failed", m.Failed)
 				}
+			}
+			if n, err := receipts.Backlog(ctx); err == nil && n > 0 {
+				// the drain runs every 5s: a nonzero backlog at the 30s
+				// health probe means rows are failing or poisoned
+				log.Warn("provider_events backlog", "unprocessed", n)
 			}
 		}
 	}
