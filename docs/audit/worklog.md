@@ -283,3 +283,59 @@ identity-plane routes are Conditional (fail-closed 404) until OIDC is provisione
 boots the API via `go run` (worked cleanly this run — 0.72s suite — but an in-process httptest
 assembly is the documented follow-up if it ever proves flaky in CI); search routes are
 PASS(degraded) until OpenSearch lands in devstack.
+
+## Wave D4e — [O-33] issue #42: load generator, measured baselines, SLO doc
+
+**Owner:** Agent D4 (Performance engineer) · **Branch:** `perf/load-slo` ·
+**Predecessor state:** 3 commits already on branch (8f98ffd loadgen binary +
+fc1403a seed-0 phone dedupe + d621c17 #90/#104 NULL provider_ref fix, found by
+the harness while seeding baselines); this session merged origin/main
+(81fc0bc, clean — the tenant-isolation worklog overlap resolved by keeping both
+sides) and finished the deliverables.
+
+**Delivered:**
+- Baselines (the run #42 asks for): devstack PG on the harness-safe
+  `ORVEXA_DEVSTACK_PORT=55444` override (orphan postgres from the canonical
+  clone killed first), fresh tenant + 40 API keys minted per
+  docs/runbooks/operations.md bootstrap (fresh tenant = empty identifier
+  space; raw keys never leave .devstack/), api binary on `127.0.0.1:18080`
+  (simulator planes, search degraded, no worker attached), ephemeral per-run
+  webhook HMAC secret. `loadgen -ramp 50,100,200 -step 60s -warmup 10s
+  -pool 64 -source-ips 64 -output …` → 20,990 measured requests, 0 errors /
+  0 non-2xx / 0 429s: webhook ingest p95 0.90ms p99 5.05ms, interaction create
+  p95 1.78ms p99 6.71ms at 200rps aggregate (achieving 199.8rps). Raw JSON +
+  summary with machine context committed under docs/perf/.
+- docs/perf/run-baseline.sh — reproducible procedure (build, devstack on the
+  override port, fresh-tenant bootstrap, api on test port, ramp, machine
+  context capture; secrets ephemeral, keys gitignored).
+- docs/slo.md — proposed SLOs (webhook ingest p95 < 100ms, interaction create
+  p95 < 250ms, availability 99.9%/99.5%, fail-closed integrity invariant),
+  30-day windows, error budget policy with burn actions, measured table, and
+  six honest caveats (loopback, fsync=off, no worker, limiter headroom
+  engineered in, 200rps = envelope end not ceiling, simulator planes).
+- #104 closure evidence: 5,248 API interaction creates in one tenant across
+  the run (64 seed + 5,184 measured), all 201, zero 409s — before d621c17 the
+  second create per tenant always collided on the
+  (tenant_id, provider, provider_ref) unique index.
+- Bottleneck issues: NONE filed — the run exposed no failure mode at the
+  measured envelope, and #42 asks for bottlenecks from data, not guesses; the
+  saturation run that could produce them is out of #42's scope (documented as
+  a caveat, not a fabricated issue).
+
+**Verification (CI-equivalent local full matrix):** `gofmt -l` clean on owned
+paths (`cmd/loadgen`, `docs`) · `go vet ./...` clean · `go build ./...` clean ·
+`go test -race ./...` exit 0 (all packages) · `go test -race
+./cmd/loadgen/...` ok · `make lint-todos` clean. Smoke run at 10rps (50
+requests, 0 errors) before the measured campaign; a first baseline attempt
+was aborted pre-measurement (409 on seed customer 0 — smoke run had populated
+the same tenant; fixed by the documented fresh-tenant bootstrap).
+
+**PR:** "perf: load generator, measured baselines, SLO doc (#42)" — Closes
+#42, Closes #104.
+
+**Risks / follow-ups:** loopback numbers are floors (no network, fsync=off
+dev datadir, 2 vCPU shared sandbox) — re-measure production-shaped before
+treating SLOs as binding; outbox growth undrained (no worker) — a worker-under-
+load run is the natural next measurement; saturation/bottleneck ranking
+untested beyond 200rps by scope; single-key limiter-gated capacity
+deliberately unmeasured (headroom posture documented in the report meta).
