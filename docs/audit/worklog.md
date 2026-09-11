@@ -234,3 +234,48 @@ matrix (#39)" — Closes #39.
 
 **Risks / follow-ups:** verdict is **BLOCKED** on the pgx bump (#81) — land it, re-run
 govulncheck, flip to PUBLIC-READY; accepted residuals documented in posture §7 (R1–R7).
+
+## Wave D9c — Developer Experience Engineer — issue #47 [O-38]
+
+**Task:** Finish the API client collection (continuation on `feat/api-collection` @
+`0456d5e`: Postman v2.1 collection already committed; salvage the untracked
+`api/examples/*.http` set, add docs + replay evidence).
+**Base:** main @ `acc2a84` · **Branch:** `feat/api-collection` · **Date:** 2026-09-11
+
+**Delivered (exclusive scope: `api/clients/`, `api/examples/`, `docs/api-clients.md`):**
+
+- Collection validation (python3 `json.load` + v2.1 structure sweep): `info.schema`
+  v2.1.0 present, `item` arrays well-formed (method+url on every leaf), 15-variable
+  block with `ORVEXA_URL`/`ORVEXA_KEY`/`ORVEXA_SECRET`, no secret defaults, 50 `pm.test`
+  snippets. Route-coverage sweep against `api/openapi/orvexa-v1.yaml` found exactly one
+  missing spec route: `GET /api/v1/` (discovery index) — added as "Discovery index" in
+  the renamed *Health & Discovery* folder; coverage now 46/46 (45 exact + webhook
+  template covered by the concrete `whatsapp_cloud` request).
+- `api/examples/*.http` (15 files, committed) — REST Client journey with `# @name`
+  chaining and `{{$processEnv …}}`-only secrets; `05-signed-webhook.http` documents the
+  signature recipe inline (`hex(HMAC-SHA256(ORVEXA_SECRET, rawBody))`, exactly the
+  `scripts/e2e-demo.sh` openssl one-liner) plus the fail-closed negatives; live-wire
+  contract notes pinned where this build binds `DisallowUnknownFields` Go field names
+  (`customerid`, `Tool`/`Args`) diverging from the OpenAPI snake_case.
+- `docs/api-clients.md` — import instructions (Postman/Bruno + VS Code REST
+  Client/JetBrains), variable table, bootstrap-SQL pointer, signature recipe,
+  quickstart pointer to `e2e-demo.sh`.
+- **Replay evidence** (`api/examples/REPLAY.md`): devstack PG 16 on port override
+  **55446** + `go run ./cmd/api` on `127.0.0.1:18080`, bootstrap SQL per runbook —
+  readiness (ready), liveness, authenticated discovery index, fail-closed 401 without
+  key, customer create (201) + list (200 contains it), interaction create (201, live-wire
+  binding verified), signed webhook ingest (202 `duplicate:false processed:true`),
+  byte-identical replay (200 `duplicate:true`, same event_id), tampered + unsigned
+  deliveries (401 `webhook.invalid_signature`). **ALL REPLAY STEPS GREEN.**
+
+**Verification (CI-equivalent local matrix):** JSON valid (post-commit re-check) ·
+`go build ./...` clean · `go vet ./...` clean · `go test ./...` green (no Go files
+touched — diff empty) · `make lint-todos` clean · transcript grep-verified free of the
+run's key/secret.
+
+**PR:** "feat(dx): Postman collection + .http examples for the full v1 surface (#47)" — Closes #47.
+
+**Risks / follow-ups:** live-wire divergences (interactions/AI-tools Go field binding +
+Go-default response field names) are pinned in the examples/docs but still disagree with
+the OpenAPI — spec alignment is a contract-plane follow-up; webhook signature evidence
+references a discarded session secret; replay artifacts (DB tenant/key) are local-only.
