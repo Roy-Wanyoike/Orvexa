@@ -1,0 +1,43 @@
+=== RUN   TestJourney1_InboundWhatsApp_Routing_Assignment_Wrapup_CaseClose
+    j1_inbound_whatsapp_test.go:34: J1 tenant 3f0fb068-8995-4dd4-a2d3-237fc172785d (key orvx_e2e_4de…)
+    j1_inbound_whatsapp_test.go:44: ✓ stack ready (db up)
+    j1_inbound_whatsapp_test.go:60: ✓ customer 7ee45805-40a7-433f-a5fe-970c0f8ec93c created
+    j1_inbound_whatsapp_test.go:72: ✓ identifier resolution: 254712345678 → +254712345678 → same customer
+    j1_inbound_whatsapp_test.go:97: ✓ inbound whatsapp interaction d7b84db6-6aa1-4ac6-8e23-786456f63c9e (conversation 5a59eddd-1a3a-4354-81f9-56b106e1c215, status pending)
+    j1_inbound_whatsapp_test.go:119: ✓ signed webhook accepted (202): event_id=auto_67bb62986bd06ede4a0339cfa2289375 processed=true
+    j1_inbound_whatsapp_test.go:131: ✓ FAILURE INJECTION (replay): duplicate=true, event_id=auto_67bb62986bd06ede4a0339cfa2289375 (single effect)
+    j1_inbound_whatsapp_test.go:138: ✓ FAILURE INJECTION (tamper): 401 webhook.invalid_signature — ingress is fail-closed
+    j1_inbound_whatsapp_test.go:148: ✓ interaction active after signed provider event
+    j1_inbound_whatsapp_test.go:167: ✓ agent a09bf870-ec77-47b3-9b8b-9c4ae2d02488 available (skills: billing, language: sw)
+    j1_inbound_whatsapp_test.go:189: ✓ routing decision df528898-e0e0-4db8-80bb-781d4962f518: outcome=assigned_agent → agent a09bf870-ec77-47b3-9b8b-9c4ae2d02488
+    j1_inbound_whatsapp_test.go:202: ✓ decision record queryable via /routing/decisions
+    j1_inbound_whatsapp_test.go:216: ✓ interaction carries AssignedAgentID after routing
+    j1_inbound_whatsapp_test.go:226: ✓ interaction wrapped up (active → wrapup)
+    j1_inbound_whatsapp_test.go:243: ✓ case CASE-2026-0001 (066e9262-77d9-4aa7-bbb7-f3b4abc12d35) opened and interaction linked
+    j1_inbound_whatsapp_test.go:259: ✓ case closed (open → in_progress → resolved → closed)
+    j1_inbound_whatsapp_test.go:281: ✓ interaction completed + conversation closed — J1 GREEN
+--- PASS: TestJourney1_InboundWhatsApp_Routing_Assignment_Wrapup_CaseClose (0.04s)
+=== RUN   TestJourney2_OutboundSMS_Receipts_Analytics
+    j2_outbound_sms_test.go:42: J2 tenant d4b373f6-8a90-475f-a5db-5e6845f1119c (key orvx_e2e_07a…)
+    j2_outbound_sms_test.go:52: ✓ customer e80fc9ab-d095-4311-aabf-2094b4aa1387
+    j2_outbound_sms_test.go:76: ✓ outbound sms interaction 69d309e0-e93a-4285-8e87-646a3bdeb55f created (status=active at response time)
+    j2_outbound_sms_test.go:89: ✓ interaction active (queued→sent); simulator sent/delivered receipts signed into the ledger (#103: ledger-only)
+    j2_outbound_sms_test.go:103: ✓ FAILURE INJECTION (tamper): read receipt with forged signature → 401, never persisted
+    j2_outbound_sms_test.go:115: ✓ signed read receipt accepted (202): event_id=auto_8f4d7b0e0b0a9e54cf2e8eee6a554e8d
+    j2_outbound_sms_test.go:127: ✓ FAILURE INJECTION (replay): duplicate=true, event_id=auto_8f4d7b0e0b0a9e54cf2e8eee6a554e8d — single effect
+    j2_outbound_sms_test.go:139: ✓ interaction completed by the carrier read receipt
+    j2_outbound_sms_test.go:167: ✓ analytics summary: total_interactions=3 by_channel=map[:2 sms:1] (window 2026-09-10T01:15:52.574615205Z → 2026-09-11T01:15:52.574615205Z)
+    j2_outbound_sms_test.go:169: J2 GREEN
+--- PASS: TestJourney2_OutboundSMS_Receipts_Analytics (0.42s)
+=== RUN   TestJourney3_AI_Suggest_ToolCall_AuditTrail
+    j3_ai_tool_audit_test.go:32: J3 tenant c81b3c79-fc53-488d-b7c9-27e14a0ae2e8 agent d4be5a1f-28fa-4d21-b4f9-f007266b9dd4 (key orvx_e2e_4b4…)
+    j3_ai_tool_audit_test.go:54: ✓ AI agent d4be5a1f-28fa-4d21-b4f9-f007266b9dd4 active (model_hint=rules-v1, tools=map[create_case:2 get_customer:5])
+    j3_ai_tool_audit_test.go:94: ✓ AI suggest (metered): outcome=completed kind=next_best_action tokens=11+16 — "Reply to the customer's latest message"
+    j3_ai_tool_audit_test.go:116: ✓ tool call executed=true through the gateway (tenant-scoped, allowlisted)
+    j3_ai_tool_audit_test.go:136: ✓ FAILURE INJECTION (policy refusal): send_whatsapp → 403 executed=false (tool not in agent allowlist)
+    j3_ai_tool_audit_test.go:160: ✓ audit trail: 1 executed + 1 refused tool decision(s) recorded
+    j3_ai_tool_audit_test.go:168: ✓ metering: usage.recorded fact (ai_tokens) recorded for the invocation
+    j3_ai_tool_audit_test.go:169: J3 GREEN
+--- PASS: TestJourney3_AI_Suggest_ToolCall_AuditTrail (0.42s)
+PASS
+ok  	github.com/Roy-Wanyoike/orvexa/tests/e2e	4.312s

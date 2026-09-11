@@ -3,7 +3,9 @@
 #
 # Single command against a fresh devstack — boots everything it needs, runs the
 # full interaction loop AND the Go customer-journey suite, asserts every step,
-# prints a summary, and leaves transcripts under qa/evidence/<UTC-date>/journeys/.
+# prints a summary, and leaves text transcripts under
+# qa/evidence/<UTC-date>/journeys/ (committed as journey evidence; .txt so
+# the repo's *.log gitignore doesn't hide them).
 #
 # Usage:
 #   bash scripts/e2e-demo.sh                  # MANAGED: devstack(55445) + api +
@@ -77,8 +79,8 @@ command -v curl >/dev/null || { echo "curl is required" >&2; exit 2; }
 
 UTC_DATE="$(date -u +%F)"
 EVID_DIR="$REPO/qa/evidence/$UTC_DATE/journeys"
-LOOP_T="$EVID_DIR/demo-loop-$(date -u +%H%M%S).log"
-JOURNEY_T="$EVID_DIR/go-journeys-$(date -u +%H%M%S).log"
+LOOP_T="$EVID_DIR/demo-loop-$(date -u +%H%M%S).txt"
+JOURNEY_T="$EVID_DIR/go-journeys-$(date -u +%H%M%S).txt"
 SCORE="$(mktemp)"
 WORKDIR="$(mktemp -d)"
 trap 'rm -f "$SCORE"' EXIT
