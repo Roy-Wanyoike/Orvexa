@@ -1,0 +1,395 @@
+{
+  "meta": {
+    "target": "http://127.0.0.1:18080",
+    "started_at": "2026-09-11T01:05:35.607421582Z",
+    "finished_at": "2026-09-11T01:08:46.140812677Z",
+    "ramp_rps": [
+      50,
+      100,
+      200
+    ],
+    "step_seconds": 60,
+    "warmup_seconds": 10,
+    "scenarios": [
+      "webhook",
+      "interaction",
+      "customer-create",
+      "customer-list"
+    ],
+    "api_keys": 40,
+    "source_ips_probed": 64,
+    "source_ips_used": 64,
+    "seeded": {
+      "customers": 64,
+      "interactions": 64
+    },
+    "go_version": "go1.27.1",
+    "gomaxprocs": 2,
+    "num_cpu": 2,
+    "os": "linux",
+    "arch": "amd64",
+    "interrupted": false
+  },
+  "steps": [
+    {
+      "step": 1,
+      "target_rps": 50,
+      "duration_seconds": 60.001645854,
+      "started_at": "2026-09-11T01:05:46.133198329Z",
+      "scenarios": {
+        "customer-create": {
+          "issued": 750,
+          "ok": 750,
+          "errors": 0,
+          "error_rate": 0,
+          "achieved_rps": 0,
+          "latency_ms": {
+            "n": 750,
+            "min": 0.91,
+            "p50": 1.268,
+            "p95": 1.747,
+            "p99": 7.554,
+            "max": 28.691,
+            "mean": 1.4530786666666664
+          },
+          "status_counts": {
+            "201": 750
+          },
+          "outcome_counts": {
+            "ok": 750
+          }
+        },
+        "customer-list": {
+          "issued": 750,
+          "ok": 750,
+          "errors": 0,
+          "error_rate": 0,
+          "achieved_rps": 0,
+          "latency_ms": {
+            "n": 750,
+            "min": 0.554,
+            "p50": 0.807,
+            "p95": 1.202,
+            "p99": 2.356,
+            "max": 23.163,
+            "mean": 0.9322946666666669
+          },
+          "status_counts": {
+            "200": 750
+          },
+          "outcome_counts": {
+            "ok": 750
+          }
+        },
+        "interaction": {
+          "issued": 750,
+          "ok": 750,
+          "errors": 0,
+          "error_rate": 0,
+          "achieved_rps": 0,
+          "latency_ms": {
+            "n": 750,
+            "min": 1.055,
+            "p50": 1.472,
+            "p95": 2.069,
+            "p99": 7.342,
+            "max": 20.261,
+            "mean": 1.627214666666664
+          },
+          "status_counts": {
+            "201": 750
+          },
+          "outcome_counts": {
+            "ok": 750
+          }
+        },
+        "webhook": {
+          "issued": 750,
+          "ok": 750,
+          "errors": 0,
+          "error_rate": 0,
+          "achieved_rps": 0,
+          "latency_ms": {
+            "n": 750,
+            "min": 0.552,
+            "p50": 0.751,
+            "p95": 1.005,
+            "p99": 3.268,
+            "max": 19.733,
+            "mean": 0.8358680000000007
+          },
+          "status_counts": {
+            "202": 750
+          },
+          "outcome_counts": {
+            "ok": 750
+          }
+        }
+      },
+      "total": {
+        "issued": 3000,
+        "ok": 3000,
+        "errors": 0,
+        "error_rate": 0,
+        "achieved_rps": 49.99862849262168,
+        "latency_ms": {
+          "n": 3000,
+          "min": 0.552,
+          "p50": 1.08,
+          "p95": 1.738,
+          "p99": 5.165,
+          "max": 28.691,
+          "mean": 1.212113999999999
+        },
+        "status_counts": {
+          "200": 750,
+          "201": 1500,
+          "202": 750
+        },
+        "outcome_counts": {
+          "ok": 3000
+        }
+      }
+    },
+    {
+      "step": 2,
+      "target_rps": 100,
+      "duration_seconds": 60.001903266,
+      "started_at": "2026-09-11T01:06:46.135214846Z",
+      "scenarios": {
+        "customer-create": {
+          "issued": 1500,
+          "ok": 1500,
+          "errors": 0,
+          "error_rate": 0,
+          "achieved_rps": 0,
+          "latency_ms": {
+            "n": 1500,
+            "min": 0.786,
+            "p50": 1.161,
+            "p95": 1.579,
+            "p99": 3.909,
+            "max": 17.434,
+            "mean": 1.2562680000000002
+          },
+          "status_counts": {
+            "201": 1500
+          },
+          "outcome_counts": {
+            "ok": 1500
+          }
+        },
+        "customer-list": {
+          "issued": 1500,
+          "ok": 1500,
+          "errors": 0,
+          "error_rate": 0,
+          "achieved_rps": 0,
+          "latency_ms": {
+            "n": 1500,
+            "min": 0.48,
+            "p50": 0.801,
+            "p95": 1.331,
+            "p99": 5.434,
+            "max": 20.113,
+            "mean": 0.9605159999999988
+          },
+          "status_counts": {
+            "200": 1500
+          },
+          "outcome_counts": {
+            "ok": 1500
+          }
+        },
+        "interaction": {
+          "issued": 1500,
+          "ok": 1500,
+          "errors": 0,
+          "error_rate": 0,
+          "achieved_rps": 0,
+          "latency_ms": {
+            "n": 1500,
+            "min": 0.962,
+            "p50": 1.385,
+            "p95": 1.878,
+            "p99": 5.736,
+            "max": 55.073,
+            "mean": 1.5731826666666664
+          },
+          "status_counts": {
+            "201": 1500
+          },
+          "outcome_counts": {
+            "ok": 1500
+          }
+        },
+        "webhook": {
+          "issued": 1500,
+          "ok": 1500,
+          "errors": 0,
+          "error_rate": 0,
+          "achieved_rps": 0,
+          "latency_ms": {
+            "n": 1500,
+            "min": 0.41,
+            "p50": 0.675,
+            "p95": 0.895,
+            "p99": 3.989,
+            "max": 17.06,
+            "mean": 0.7705579999999999
+          },
+          "status_counts": {
+            "202": 1500
+          },
+          "outcome_counts": {
+            "ok": 1500
+          }
+        }
+      },
+      "total": {
+        "issued": 6000,
+        "ok": 6000,
+        "errors": 0,
+        "error_rate": 0,
+        "achieved_rps": 99.99682799061962,
+        "latency_ms": {
+          "n": 6000,
+          "min": 0.41,
+          "p50": 0.994,
+          "p95": 1.652,
+          "p99": 4.763,
+          "max": 55.073,
+          "mean": 1.1401311666666665
+        },
+        "status_counts": {
+          "200": 1500,
+          "201": 3000,
+          "202": 1500
+        },
+        "outcome_counts": {
+          "ok": 6000
+        }
+      }
+    },
+    {
+      "step": 3,
+      "target_rps": 200,
+      "duration_seconds": 60.001676307,
+      "started_at": "2026-09-11T01:07:46.137799798Z",
+      "scenarios": {
+        "customer-create": {
+          "issued": 2997,
+          "ok": 2997,
+          "errors": 0,
+          "error_rate": 0,
+          "achieved_rps": 0,
+          "latency_ms": {
+            "n": 2997,
+            "min": 0.644,
+            "p50": 1.045,
+            "p95": 1.559,
+            "p99": 6.048,
+            "max": 28.071,
+            "mean": 1.2001344678011314
+          },
+          "status_counts": {
+            "201": 2997
+          },
+          "outcome_counts": {
+            "ok": 2997
+          }
+        },
+        "customer-list": {
+          "issued": 2997,
+          "ok": 2997,
+          "errors": 0,
+          "error_rate": 0,
+          "achieved_rps": 0,
+          "latency_ms": {
+            "n": 2997,
+            "min": 0.466,
+            "p50": 0.715,
+            "p95": 1.094,
+            "p99": 4.484,
+            "max": 26.379,
+            "mean": 0.8476279612946271
+          },
+          "status_counts": {
+            "200": 2997
+          },
+          "outcome_counts": {
+            "ok": 2997
+          }
+        },
+        "interaction": {
+          "issued": 2998,
+          "ok": 2998,
+          "errors": 0,
+          "error_rate": 0,
+          "achieved_rps": 0,
+          "latency_ms": {
+            "n": 2998,
+            "min": 0.785,
+            "p50": 1.214,
+            "p95": 1.779,
+            "p99": 6.71,
+            "max": 44.709,
+            "mean": 1.385286190793864
+          },
+          "status_counts": {
+            "201": 2998
+          },
+          "outcome_counts": {
+            "ok": 2998
+          }
+        },
+        "webhook": {
+          "issued": 2998,
+          "ok": 2998,
+          "errors": 0,
+          "error_rate": 0,
+          "achieved_rps": 0,
+          "latency_ms": {
+            "n": 2998,
+            "min": 0.379,
+            "p50": 0.611,
+            "p95": 0.899,
+            "p99": 5.049,
+            "max": 36.579,
+            "mean": 0.7559559706470986
+          },
+          "status_counts": {
+            "202": 2998
+          },
+          "outcome_counts": {
+            "ok": 2998
+          }
+        }
+      },
+      "total": {
+        "issued": 11990,
+        "ok": 11990,
+        "errors": 0,
+        "error_rate": 0,
+        "achieved_rps": 199.82775045571861,
+        "latency_ms": {
+          "n": 11990,
+          "min": 0.379,
+          "p50": 0.897,
+          "p95": 1.545,
+          "p99": 5.351,
+          "max": 44.709,
+          "mean": 1.0472550458715615
+        },
+        "status_counts": {
+          "200": 2997,
+          "201": 5995,
+          "202": 2998
+        },
+        "outcome_counts": {
+          "ok": 11990
+        }
+      }
+    }
+  ]
+}
